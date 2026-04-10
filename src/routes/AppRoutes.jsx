@@ -26,6 +26,7 @@ import InvoiceDetail from '../pages/invoices/InvoiceDetail'
 import Import from '../pages/import/Import'
 import AuditLogs from '../pages/audit-logs/AuditLogs'
 import WaitingList from '../pages/WaitingList'
+import LandingPage from '../pages/LandingPage'
 
 function PrivateRoute({ children }) {
     const { user, loading } = useAuth()
@@ -85,6 +86,8 @@ export default function AppRoutes() {
         <Routes>
 
             {/* ── Public routes — no auth required ── */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/landing" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
