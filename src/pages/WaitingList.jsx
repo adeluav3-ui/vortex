@@ -68,7 +68,7 @@ export default function WaitingList() {
 
     if (success) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
+            <div className="min-h-screen bg-linear-to-r from-blue-50 to-indigo-100 flex items-center justify-center px-4">
                 <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
                     <div className="text-6xl mb-4">🎉</div>
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">You're on the list!</h2>
@@ -92,7 +92,7 @@ export default function WaitingList() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="min-h-screen bg-linear-to-r from-blue-50 to-indigo-100">
             {/* Hero Section */}
             <div className="max-w-4xl mx-auto px-4 py-16 md:py-24">
                 {/* Logo/Brand */}
@@ -114,7 +114,7 @@ export default function WaitingList() {
                 <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
                     <div className="grid md:grid-cols-2">
                         {/* Left - Info */}
-                        <div className="p-8 md:p-10 bg-gradient-to-br from-blue-600 to-indigo-700 text-white">
+                        <div className="p-8 md:p-10 bg-linear-to-r from-blue-600 to-indigo-700 text-white">
                             <div className="mb-6">
                                 <div className="text-4xl mb-3">🚀</div>
                                 <h2 className="text-2xl font-bold mb-2">

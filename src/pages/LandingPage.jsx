@@ -13,20 +13,20 @@ export default function LandingPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="min-h-screen bg-linear-to-r from-blue-50 via-white to-blue-50">
             {/* Navigation Bar */}
             <nav className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
                         <div className="flex items-center gap-2">
-                            <img src={logo} alt="Vortex" className="h-8 w-8" />
-                            <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                            <img src={logo} alt="Vortex" className="h-8 w-8 object-contain" />
+                            <span className="text-xl font-bold bg-linear-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
                                 Vortex
                             </span>
                         </div>
                         <button
                             onClick={() => navigate('/login')}
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition shadow-sm"
+                            className="px-4 py-2 text-sm font-medium text-white bg-linear-to-r from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition shadow-sm"
                         >
                             Sign In
                         </button>
@@ -42,7 +42,7 @@ export default function LandingPage() {
                     </div>
                     <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
                         The All-in-One{' '}
-                        <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                        <span className="bg-linear-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
                             Business Management
                         </span>{' '}
                         Platform
@@ -53,7 +53,7 @@ export default function LandingPage() {
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <button
                             onClick={() => navigate('/signup')}
-                            className="px-8 py-3 text-base font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl hover:shadow-lg transition-all transform hover:scale-105"
+                            className="px-8 py-3 text-base font-semibold text-white bg-linear-to-r from-blue-600 to-blue-700 rounded-xl hover:shadow-lg transition-all transform hover:scale-105"
                         >
                             Get Started Free
                         </button>
@@ -112,7 +112,7 @@ export default function LandingPage() {
                                 description: "Build customer profiles, track purchase history, and manage relationships"
                             }
                         ].map((feature, index) => (
-                            <div key={index} className="bg-gray-50 rounded-2xl p-6 hover:shadow-lg transition">
+                            <div key={index} className="bg-gray-50 rounded-2xl p-6 hover:shadow-lg transition hover:border-blue-200 border border-transparent">
                                 <div className="text-4xl mb-4">{feature.icon}</div>
                                 <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.title}</h3>
                                 <p className="text-gray-600">{feature.description}</p>
@@ -123,7 +123,7 @@ export default function LandingPage() {
             </section>
 
             {/* Two Modes Section */}
-            <section className="py-20">
+            <section className="py-20 bg-linear-to-r from-blue-50 to-white">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -136,43 +136,43 @@ export default function LandingPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {/* Online Vendor Card */}
-                        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-8 border border-purple-100">
+                        <div className="bg-white rounded-2xl p-8 border border-blue-100 shadow-sm hover:shadow-md transition">
                             <div className="text-5xl mb-4">📱</div>
                             <h3 className="text-2xl font-bold text-gray-900 mb-2">Online Vendor</h3>
                             <p className="text-gray-600 mb-4">Perfect for sellers on WhatsApp, Instagram, and social media</p>
                             <ul className="space-y-2 mb-6">
                                 <li className="flex items-center gap-2 text-sm text-gray-700">
-                                    <span className="text-green-500">✓</span> Order management from multiple sources
+                                    <span className="text-blue-500">✓</span> Order management from multiple sources
                                 </li>
                                 <li className="flex items-center gap-2 text-sm text-gray-700">
-                                    <span className="text-green-500">✓</span> Product variants (sizes, colors)
+                                    <span className="text-blue-500">✓</span> Product variants (sizes, colors)
                                 </li>
                                 <li className="flex items-center gap-2 text-sm text-gray-700">
-                                    <span className="text-green-500">✓</span> Customer history and tracking
+                                    <span className="text-blue-500">✓</span> Customer history and tracking
                                 </li>
                                 <li className="flex items-center gap-2 text-sm text-gray-700">
-                                    <span className="text-green-500">✓</span> Delivery tracking and invoices
+                                    <span className="text-blue-500">✓</span> Delivery tracking and invoices
                                 </li>
                             </ul>
                         </div>
 
                         {/* Retail Store Card */}
-                        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-8 border border-blue-100">
+                        <div className="bg-white rounded-2xl p-8 border border-blue-100 shadow-sm hover:shadow-md transition">
                             <div className="text-5xl mb-4">🏪</div>
                             <h3 className="text-2xl font-bold text-gray-900 mb-2">Retail Store</h3>
                             <p className="text-gray-600 mb-4">Ideal for physical shops, restaurants, and pharmacies</p>
                             <ul className="space-y-2 mb-6">
                                 <li className="flex items-center gap-2 text-sm text-gray-700">
-                                    <span className="text-green-500">✓</span> POS system and sales tracking
+                                    <span className="text-blue-500">✓</span> POS system and sales tracking
                                 </li>
                                 <li className="flex items-center gap-2 text-sm text-gray-700">
-                                    <span className="text-green-500">✓</span> Multi-branch inventory
+                                    <span className="text-blue-500">✓</span> Multi-branch inventory
                                 </li>
                                 <li className="flex items-center gap-2 text-sm text-gray-700">
-                                    <span className="text-green-500">✓</span> Expense and staff management
+                                    <span className="text-blue-500">✓</span> Expense and staff management
                                 </li>
                                 <li className="flex items-center gap-2 text-sm text-gray-700">
-                                    <span className="text-green-500">✓</span> Supplier and purchase orders
+                                    <span className="text-blue-500">✓</span> Supplier and purchase orders
                                 </li>
                             </ul>
                         </div>
@@ -181,7 +181,7 @@ export default function LandingPage() {
             </section>
 
             {/* Pricing Section */}
-            <section className="bg-gray-50 py-20">
+            <section className="bg-white py-20">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -207,17 +207,17 @@ export default function LandingPage() {
                                 period: "/month",
                                 features: ["500 orders/month", "2 user accounts", "Unlimited products", "Payment tracking", "Delivery tracking"],
                                 popular: true,
-                                color: "from-blue-600 to-purple-600"
+                                color: "from-blue-600 to-blue-700"
                             },
                             {
                                 name: "Scale",
                                 price: "₦18,000",
                                 period: "/month",
                                 features: ["Unlimited orders", "5 user accounts", "Unlimited products", "Full reports", "Priority support"],
-                                color: "from-purple-600 to-pink-600"
+                                color: "from-blue-700 to-blue-800"
                             }
                         ].map((plan, index) => (
-                            <div key={index} className={`bg-white rounded-2xl p-6 shadow-lg relative ${plan.popular ? 'ring-2 ring-blue-500' : ''}`}>
+                            <div key={index} className={`bg-white rounded-2xl p-6 shadow-lg relative ${plan.popular ? 'ring-2 ring-blue-500' : 'border border-gray-100'}`}>
                                 {plan.popular && (
                                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                                         <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">Most Popular</span>
@@ -231,13 +231,13 @@ export default function LandingPage() {
                                 <ul className="space-y-2 mb-6">
                                     {plan.features.map((feature, i) => (
                                         <li key={i} className="flex items-center gap-2 text-sm text-gray-600">
-                                            <span className="text-green-500">✓</span> {feature}
+                                            <span className="text-blue-500">✓</span> {feature}
                                         </li>
                                     ))}
                                 </ul>
                                 <button
                                     onClick={() => navigate('/signup')}
-                                    className={`w-full py-2 rounded-lg font-semibold transition bg-gradient-to-r ${plan.color} text-white hover:opacity-90`}
+                                    className={`w-full py-2 rounded-lg font-semibold transition bg-linear-to-r ${plan.color} text-white hover:opacity-90`}
                                 >
                                     Get Started
                                 </button>
@@ -248,7 +248,7 @@ export default function LandingPage() {
             </section>
 
             {/* CTA Section */}
-            <section className="bg-gradient-to-r from-blue-600 to-purple-600 py-20">
+            <section className="bg-linear-to-r from-blue-600 to-blue-800 py-20">
                 <div className="max-w-4xl mx-auto text-center px-4">
                     <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
                         Ready to Transform Your Business?
@@ -269,7 +269,7 @@ export default function LandingPage() {
             <footer className="bg-gray-900 text-gray-400 py-12">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center">
-                        <p>&copy; 2024 Vortex. All rights reserved.</p>
+                        <p>&copy; 2026 Vortex. All rights reserved.</p>
                         <p className="text-sm mt-2">Made with ❤️ for Nigerian businesses</p>
                     </div>
                 </div>
