@@ -1,19 +1,77 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import logo from '../assets/logo.png'
 
+// Vendor Plans
+const VENDOR_PLANS = [
+    {
+        tier: 'solo',
+        name: 'Solo',
+        monthlyPrice: 4500,
+        yearlyPrice: 45900,
+        features: ['100 orders/month', '1 user account', 'Up to 50 products', 'Order management', 'Customer tracking', 'Logistics directory'],
+    },
+    {
+        tier: 'hustle',
+        name: 'Hustle',
+        monthlyPrice: 9500,
+        yearlyPrice: 96900,
+        badge: 'Most Popular',
+        features: ['500 orders/month', '2 user accounts', 'Unlimited products', 'Everything in Solo', 'Payment tracking', 'Delivery tracking'],
+    },
+    {
+        tier: 'scale',
+        name: 'Scale',
+        monthlyPrice: 18000,
+        yearlyPrice: 183600,
+        badge: 'Best Value',
+        features: ['Unlimited orders', '5 user accounts', 'Unlimited products', 'Everything in Hustle', 'Full reports & export', 'Storefront link', 'Priority support'],
+    },
+]
+
+// Retail Plans
+const RETAIL_PLANS = [
+    {
+        tier: 'starter',
+        name: 'Starter',
+        monthlyPrice: 8000,
+        yearlyPrice: 81600,
+        features: ['1 branch', '2 staff accounts', 'Up to 50 products', 'Sales / POS', 'Inventory', 'Expenses', 'Customers'],
+    },
+    {
+        tier: 'growth',
+        name: 'Growth',
+        monthlyPrice: 15000,
+        yearlyPrice: 153000,
+        badge: 'Most Popular',
+        features: ['Up to 3 branches', '15 staff accounts', 'Up to 200 products', 'Everything in Starter', 'Full Reports', 'Stock transfers'],
+    },
+    {
+        tier: 'business',
+        name: 'Business',
+        monthlyPrice: 25000,
+        yearlyPrice: 255000,
+        badge: 'Best Value',
+        features: ['Unlimited branches', 'Unlimited staff', 'Unlimited products', 'Everything in Growth', 'Audit logs', 'Priority support'],
+    },
+]
+
 export default function LandingPage() {
     const navigate = useNavigate()
     const { user } = useAuth()
+    const [pricingTab, setPricingTab] = useState('vendors') // 'vendors' or 'retail'
+    const [billingInterval, setBillingInterval] = useState('monthly')
 
-    // If user is already logged in, redirect to dashboard
     if (user) {
         navigate('/dashboard')
         return null
     }
 
+    const currentPlans = pricingTab === 'vendors' ? VENDOR_PLANS : RETAIL_PLANS
+
     return (
-        <div className="min-h-screen bg-linear-to-r from-blue-50 via-white to-blue-50">
+        <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-blue-50">
             {/* Navigation Bar */}
             <nav className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -123,7 +181,7 @@ export default function LandingPage() {
             </section>
 
             {/* Two Modes Section */}
-            <section className="py-20 bg-linear-to-r from-blue-50 to-white">
+            <section className="py-20 bg-linear-to-br from-blue-50 to-white">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -180,7 +238,7 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* Pricing Section */}
+            {/* Pricing Section with Tabs */}
             <section className="bg-white py-20">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
@@ -188,62 +246,105 @@ export default function LandingPage() {
                             Simple, Transparent Pricing
                         </h2>
                         <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                            Start free, upgrade as you grow
+                            Choose the plan that fits your business
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {[
-                            {
-                                name: "Solo",
-                                price: "₦4,500",
-                                period: "/month",
-                                features: ["100 orders/month", "1 user account", "Up to 50 products", "Order management", "Customer tracking"],
-                                color: "from-gray-600 to-gray-700"
-                            },
-                            {
-                                name: "Hustle",
-                                price: "₦9,500",
-                                period: "/month",
-                                features: ["500 orders/month", "2 user accounts", "Unlimited products", "Payment tracking", "Delivery tracking"],
-                                popular: true,
-                                color: "from-blue-600 to-blue-700"
-                            },
-                            {
-                                name: "Scale",
-                                price: "₦18,000",
-                                period: "/month",
-                                features: ["Unlimited orders", "5 user accounts", "Unlimited products", "Full reports", "Priority support"],
-                                color: "from-blue-700 to-blue-800"
-                            }
-                        ].map((plan, index) => (
-                            <div key={index} className={`bg-white rounded-2xl p-6 shadow-lg relative ${plan.popular ? 'ring-2 ring-blue-500' : 'border border-gray-100'}`}>
-                                {plan.popular && (
-                                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                                        <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">Most Popular</span>
-                                    </div>
-                                )}
-                                <h3 className="text-xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                                <div className="mb-4">
-                                    <span className="text-3xl font-bold text-gray-900">{plan.price}</span>
-                                    <span className="text-gray-500">{plan.period}</span>
-                                </div>
-                                <ul className="space-y-2 mb-6">
-                                    {plan.features.map((feature, i) => (
-                                        <li key={i} className="flex items-center gap-2 text-sm text-gray-600">
-                                            <span className="text-blue-500">✓</span> {feature}
-                                        </li>
-                                    ))}
-                                </ul>
-                                <button
-                                    onClick={() => navigate('/signup')}
-                                    className={`w-full py-2 rounded-lg font-semibold transition bg-linear-to-r ${plan.color} text-white hover:opacity-90`}
-                                >
-                                    Get Started
-                                </button>
-                            </div>
-                        ))}
+                    {/* Pricing Tabs */}
+                    <div className="flex justify-center mb-8">
+                        <div className="bg-gray-100 rounded-xl p-1 flex gap-1">
+                            <button
+                                onClick={() => setPricingTab('vendors')}
+                                className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${pricingTab === 'vendors'
+                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                            >
+                                📱 For Vendors
+                            </button>
+                            <button
+                                onClick={() => setPricingTab('retail')}
+                                className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${pricingTab === 'retail'
+                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                            >
+                                🏪 For Retail Stores
+                            </button>
+                        </div>
                     </div>
+
+                    {/* Billing Interval Toggle */}
+                    <div className="flex items-center justify-center gap-3 mb-8">
+                        <button
+                            onClick={() => setBillingInterval('monthly')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'monthly'
+                                ? 'bg-blue-600 text-white'
+                                : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                                }`}
+                        >
+                            Monthly
+                        </button>
+                        <button
+                            onClick={() => setBillingInterval('yearly')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'yearly'
+                                ? 'bg-blue-600 text-white'
+                                : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                                }`}
+                        >
+                            Yearly
+                            <span className="ml-2 text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full font-semibold">
+                                15% off
+                            </span>
+                        </button>
+                    </div>
+
+                    {/* Plan Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {currentPlans.map((plan, index) => {
+                            const price = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
+                            const monthlyEquiv = billingInterval === 'yearly'
+                                ? Math.round(plan.yearlyPrice / 12).toLocaleString()
+                                : null
+
+                            return (
+                                <div key={plan.tier} className={`bg-white rounded-2xl p-6 shadow-lg relative ${plan.badge === 'Most Popular' ? 'ring-2 ring-blue-500' : 'border border-gray-100'}`}>
+                                    {plan.badge && (
+                                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                                            <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                                                {plan.badge}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <h3 className="text-xl font-bold text-gray-900 mb-2">{plan.name}</h3>
+                                    <div className="mb-4">
+                                        <span className="text-3xl font-bold text-gray-900">₦{price.toLocaleString()}</span>
+                                        <span className="text-gray-500">/{billingInterval === 'yearly' ? 'yr' : 'mo'}</span>
+                                        {monthlyEquiv && (
+                                            <p className="text-xs text-green-600 mt-1">₦{monthlyEquiv}/mo (billed yearly)</p>
+                                        )}
+                                    </div>
+                                    <ul className="space-y-2 mb-6">
+                                        {plan.features.map((feature, i) => (
+                                            <li key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                                                <span className="text-blue-500">✓</span> {feature}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <button
+                                        onClick={() => navigate('/signup')}
+                                        className="w-full py-2 rounded-lg font-semibold transition bg-linear-to-r from-blue-600 to-blue-700 text-white hover:opacity-90"
+                                    >
+                                        Get Started
+                                    </button>
+                                </div>
+                            )
+                        })}
+                    </div>
+
+                    <p className="text-center text-sm text-gray-500 mt-8">
+                        All plans include a 14-day free trial for vendors. No credit card required.
+                    </p>
                 </div>
             </section>
 
