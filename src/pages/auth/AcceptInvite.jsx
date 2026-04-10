@@ -87,6 +87,12 @@ export default function AcceptInvite() {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
                 <div className="bg-white rounded-2xl shadow p-8 w-full max-w-md text-center">
+                    <div className="flex items-center justify-center mb-6">
+                        <img src="/logo.png" alt="Vortex" className="h-12 w-12 object-contain" />
+                        <span className="ml-3 text-2xl font-bold bg-linear-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                            Vortex
+                        </span>
+                    </div>
                     <p className="text-4xl mb-4">❌</p>
                     <h1 className="text-lg font-bold text-gray-900 mb-2">Invite Error</h1>
                     <p className="text-sm text-gray-500">{error}</p>

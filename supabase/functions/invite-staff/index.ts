@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
           role,
           staff_id,
         },
-        redirectTo: `${Deno.env.get('SITE_URL') ?? 'http://localhost:5173'}/accept-invite`,
+        redirectTo: `${Deno.env.get('SITE_URL') ?? 'https://vortex-uq9t.vercel.app/'}/accept-invite`,
       }
     )
 
