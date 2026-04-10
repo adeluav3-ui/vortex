@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+.npm/
+
+# Build output
+dist/
+build/
+.out/
+.next/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
+
+# React / Vite
+.vite/
+
+# Production
+*.local
+
+# Debug
+*.pid
+*.seed
+*.pid.lock
+
+# Optional: Keep lock files but commit them
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Sensitive data
+*.pem
+*.key
+*.cert
+.secret
