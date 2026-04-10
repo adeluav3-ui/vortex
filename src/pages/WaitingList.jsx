@@ -81,7 +81,7 @@ export default function WaitingList() {
                         </p>
                     </div>
                     <button
-                        onClick={() => window.open('https://vortex.ng', '_blank')}
+                        onClick={() => window.open('https://vortex-uq9t.vercel.app/', '_blank')}
                         className="text-blue-600 hover:text-blue-700 font-medium"
                     >
                         Learn more about Vortex →
