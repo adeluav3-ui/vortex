@@ -39,7 +39,9 @@ export default function NewOrder() {
     const [showProductDropdown, setShowProductDropdown] = useState(false)
     const [orderLimit, setOrderLimit] = useState({ atLimit: false, limit: Infinity, remaining: Infinity, current: 0 })
 
+    // ── Always read both tier AND status for correct limit calculation ────────
     const tier = profile?.businesses?.subscription_tier ?? 'solo'
+    const subStatus = profile?.subscription?.status ?? 'inactive'
 
     const [form, setForm] = useState({
         customer_name: '', customer_phone: '', customer_address: '',
@@ -65,7 +67,8 @@ export default function NewOrder() {
             .eq('business_id', profile.business_id)
             .gte('created_at', monthStart)
             .neq('status', 'cancelled')
-        const result = checkOrderLimit(tier, count ?? 0)
+        // Pass subStatus so trialing vendors always get Infinity limit
+        const result = checkOrderLimit(tier, count ?? 0, subStatus)
         setOrderLimit({ ...result, current: count ?? 0 })
         setCheckingLimit(false)
     }
@@ -86,9 +89,7 @@ export default function NewOrder() {
 
         const enriched = []
         for (const product of (data ?? [])) {
-            const variants = product.product_variants ?? []
-
-            for (const variant of variants) {
+            for (const variant of (product.product_variants ?? [])) {
                 const stock = variant.stock_levels?.[0]
                 enriched.push({
                     id: variant.id,
@@ -121,7 +122,6 @@ export default function NewOrder() {
     }
 
     function addProduct(product) {
-        // Check stock availability
         if (product.stock_quantity <= 0) {
             setError(`${product.display_name} is out of stock`)
             return
@@ -212,7 +212,6 @@ export default function NewOrder() {
         if (orderItems.length === 0) return setError('Add at least one item to the order')
         if (orderItems.some(i => !i.product_name || !i.unit_price)) return setError('All items need a name and price')
 
-        // Final stock validation
         for (const item of orderItems) {
             if (item.max_stock !== null && item.quantity > item.max_stock) {
                 setError(`Insufficient stock for ${item.display_name || item.product_name}. Only ${item.max_stock} available.`)
@@ -221,130 +220,68 @@ export default function NewOrder() {
         }
 
         setLoading(true)
-
         try {
             const { data: seqData, error: seqError } = await supabase.rpc('generate_order_number', { business_uuid: profile.business_id })
             if (seqError) throw seqError
 
-            // Handle customer creation/update
+            // Customer upsert
             let customerId = form.customer_id
             if (!customerId) {
                 const customerName = form.customer_name.trim()
                 const customerPhone = form.customer_phone.trim() || null
-
                 if (customerPhone) {
-                    const { data: existing } = await supabase
-                        .from('customers')
-                        .select('id')
-                        .eq('business_id', profile.business_id)
-                        .eq('phone', customerPhone)
-                        .maybeSingle()
-
+                    const { data: existing } = await supabase.from('customers').select('id').eq('business_id', profile.business_id).eq('phone', customerPhone).maybeSingle()
                     if (existing) {
                         await supabase.from('customers').update({ full_name: customerName }).eq('id', existing.id)
                         customerId = existing.id
                     } else {
-                        const { data: newCustomer } = await supabase
-                            .from('customers')
-                            .insert({
-                                business_id: profile.business_id,
-                                branch_id: profile.branch_id,
-                                full_name: customerName,
-                                phone: customerPhone,
-                            })
-                            .select('id').single()
-                        customerId = newCustomer?.id ?? null
+                        const { data: newC } = await supabase.from('customers').insert({ business_id: profile.business_id, branch_id: null, full_name: customerName, phone: customerPhone }).select('id').single()
+                        customerId = newC?.id ?? null
                     }
                 } else {
-                    const { data: newCustomer } = await supabase
-                        .from('customers')
-                        .insert({
-                            business_id: profile.business_id,
-                            branch_id: profile.branch_id,
-                            full_name: customerName,
-                        })
-                        .select('id').single()
-                    customerId = newCustomer?.id ?? null
+                    const { data: newC } = await supabase.from('customers').insert({ business_id: profile.business_id, branch_id: null, full_name: customerName }).select('id').single()
+                    customerId = newC?.id ?? null
                 }
             }
 
-            // Create the order
             const { data: order, error: orderError } = await supabase
                 .from('vendor_orders')
                 .insert({
-                    business_id: profile.business_id,
-                    order_number: seqData,
-                    customer_id: customerId,
-                    customer_name: form.customer_name.trim(),
+                    business_id: profile.business_id, order_number: seqData,
+                    customer_id: customerId, customer_name: form.customer_name.trim(),
                     customer_phone: form.customer_phone.trim() || null,
                     customer_address: form.customer_address.trim() || null,
-                    order_source: form.order_source,
-                    notes: form.notes.trim() || null,
-                    total_amount: totalAmount,
-                    amount_paid: amountPaid,
-                    payment_status: paymentStatus,
-                    payment_method: amountPaid > 0 ? form.payment_method : null,
+                    order_source: form.order_source, notes: form.notes.trim() || null,
+                    total_amount: totalAmount, amount_paid: amountPaid,
+                    payment_status: paymentStatus, payment_method: amountPaid > 0 ? form.payment_method : null,
                     status: 'pending',
                 })
                 .select().single()
-
             if (orderError) throw orderError
 
-            // Create order items and deduct stock
             for (const item of orderItems) {
-                // Insert order item with variant_id for profit calculation
                 const { error: itemsError } = await supabase.from('order_items').insert({
-                    order_id: order.id,
-                    product_id: item.product_id,
-                    product_name: item.product_name,
-                    variant_name: item.variant_name || null,
-                    variant_id: item.variant_id,
-                    unit_price: Number(item.unit_price),
-                    quantity: Number(item.quantity),
+                    order_id: order.id, product_id: item.product_id,
+                    product_name: item.product_name, variant_name: item.variant_name || null,
+                    variant_id: item.variant_id, unit_price: Number(item.unit_price), quantity: Number(item.quantity),
                 })
                 if (itemsError) throw itemsError
 
-                // Deduct stock if it's a tracked product
                 if (item.stock_level_id && item.variant_id) {
-                    // Get current stock level
-                    const { data: currentStock, error: stockFetchError } = await supabase
-                        .from('stock_levels')
-                        .select('quantity')
-                        .eq('id', item.stock_level_id)
-                        .single()
-
+                    const { data: currentStock, error: stockFetchError } = await supabase.from('stock_levels').select('quantity').eq('id', item.stock_level_id).single()
                     if (stockFetchError) throw stockFetchError
-
-                    const newQuantity = currentStock.quantity - Number(item.quantity)
-
-                    // Update stock level
-                    const { error: stockUpdateError } = await supabase
-                        .from('stock_levels')
-                        .update({ quantity: newQuantity })
-                        .eq('id', item.stock_level_id)
-
+                    const { error: stockUpdateError } = await supabase.from('stock_levels').update({ quantity: currentStock.quantity - Number(item.quantity) }).eq('id', item.stock_level_id)
                     if (stockUpdateError) throw stockUpdateError
-
-                    // Log stock movement
                     await supabase.from('stock_movements').insert({
-                        business_id: profile.business_id,
-                        branch_id: profile.branch_id,
-                        variant_id: item.variant_id,
-                        user_id: profile.id,
-                        type: 'sale',
+                        business_id: profile.business_id, branch_id: profile.branch_id,
+                        variant_id: item.variant_id, user_id: profile.id, type: 'sale',
                         quantity: -Number(item.quantity),
                         note: `Order #${seqData} - ${item.product_name}${item.variant_name ? ` (${item.variant_name})` : ''}`,
                     })
                 }
             }
 
-            // Add order status history
-            await supabase.from('order_status_history').insert({
-                order_id: order.id,
-                status: 'pending',
-                changed_by: profile.id
-            })
-
+            await supabase.from('order_status_history').insert({ order_id: order.id, status: 'pending', changed_by: profile.id })
             navigate(`/orders/${order.id}`)
         } catch (err) {
             setError(err.message)
@@ -363,7 +300,9 @@ export default function NewOrder() {
                     <span className="text-5xl">🔒</span>
                     <h2 className="text-lg font-bold text-gray-900">Monthly order limit reached</h2>
                     <p className="text-sm text-gray-500 leading-relaxed">
-                        You've used <span className="font-semibold text-gray-700">{orderLimit.current}</span> of your <span className="font-semibold text-gray-700">{orderLimit.limit}</span> orders this month on the <span className="font-semibold capitalize">{tier}</span> plan.
+                        You've used <span className="font-semibold text-gray-700">{orderLimit.current}</span> of your{' '}
+                        <span className="font-semibold text-gray-700">{orderLimit.limit}</span> orders this month on the{' '}
+                        <span className="font-semibold capitalize">{tier}</span> plan.
                     </p>
                     <div className="w-full bg-gray-100 rounded-full h-2">
                         <div className="bg-red-500 h-2 rounded-full w-full" />
@@ -442,16 +381,13 @@ export default function NewOrder() {
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
                         <h3 className="text-sm font-semibold text-gray-900">Order Items</h3>
                         <div className="relative">
-                            <input value={productSearch} onChange={e => { setProductSearch(e.target.value); setShowProductDropdown(e.target.value.length > 0) }} placeholder="🔍 Search products to add..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            <input value={productSearch} onChange={e => { setProductSearch(e.target.value); setShowProductDropdown(e.target.value.length > 0) }}
+                                placeholder="🔍 Search products to add..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                             {showProductDropdown && filteredProducts.length > 0 && (
                                 <div className="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 overflow-hidden max-h-64 overflow-y-auto">
                                     {filteredProducts.map(p => (
-                                        <button
-                                            key={p.id}
-                                            onClick={() => addProduct(p)}
-                                            disabled={p.stock_quantity <= 0}
-                                            className={`w-full text-left px-4 py-2.5 transition flex items-center justify-between ${p.stock_quantity <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50'}`}
-                                        >
+                                        <button key={p.id} onClick={() => addProduct(p)} disabled={p.stock_quantity <= 0}
+                                            className={`w-full text-left px-4 py-2.5 transition flex items-center justify-between ${p.stock_quantity <= 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50'}`}>
                                             <div>
                                                 <p className="text-sm font-medium text-gray-900">{p.display_name}</p>
                                                 <p className="text-xs text-gray-400">{p.stock_quantity} in stock</p>
@@ -471,48 +407,25 @@ export default function NewOrder() {
                                     <div key={index} className="border border-gray-200 rounded-lg p-3 space-y-2">
                                         <div className="flex items-start gap-2">
                                             <div className="flex-1 space-y-2">
-                                                <input
-                                                    value={item.product_name}
-                                                    onChange={e => updateItem(index, 'product_name', e.target.value)}
-                                                    placeholder="Product name"
-                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
-                                                {item.variant_name && (
-                                                    <p className="text-xs text-gray-500 px-1">Variant: {item.variant_name}</p>
-                                                )}
-                                                <input
-                                                    value={item.variant_name || ''}
-                                                    onChange={e => updateItem(index, 'variant_name', e.target.value)}
-                                                    placeholder="Variant (e.g. Red, Size L) — optional"
-                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
+                                                <input value={item.product_name} onChange={e => updateItem(index, 'product_name', e.target.value)} placeholder="Product name"
+                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                                {item.variant_name && <p className="text-xs text-gray-500 px-1">Variant: {item.variant_name}</p>}
+                                                <input value={item.variant_name || ''} onChange={e => updateItem(index, 'variant_name', e.target.value)} placeholder="Variant (e.g. Red, Size L) — optional"
+                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                                             </div>
                                             <button onClick={() => removeItem(index)} className="text-red-400 hover:text-red-600 mt-1 shrink-0">✕</button>
                                         </div>
                                         <div className="flex gap-2">
                                             <div className="flex-1">
                                                 <label className="text-xs text-gray-500 mb-0.5 block">Unit Price (₦)</label>
-                                                <input
-                                                    type="number"
-                                                    value={item.unit_price}
-                                                    onChange={e => updateItem(index, 'unit_price', e.target.value)}
-                                                    placeholder="0"
-                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
+                                                <input type="number" value={item.unit_price} onChange={e => updateItem(index, 'unit_price', e.target.value)} placeholder="0"
+                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                                             </div>
                                             <div className="w-24">
                                                 <label className="text-xs text-gray-500 mb-0.5 block">Qty</label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max={item.max_stock}
-                                                    value={item.quantity}
-                                                    onChange={e => updateItem(index, 'quantity', e.target.value)}
-                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
-                                                {item.max_stock !== null && (
-                                                    <p className="text-xs text-gray-400 mt-0.5">Max: {item.max_stock}</p>
-                                                )}
+                                                <input type="number" min="1" max={item.max_stock} value={item.quantity} onChange={e => updateItem(index, 'quantity', e.target.value)}
+                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                                {item.max_stock !== null && <p className="text-xs text-gray-400 mt-0.5">Max: {item.max_stock}</p>}
                                             </div>
                                             <div className="w-28 text-right">
                                                 <label className="text-xs text-gray-500 mb-0.5 block">Subtotal</label>
@@ -527,7 +440,7 @@ export default function NewOrder() {
                     </div>
                 </div>
 
-                {/* Right */}
+                {/* Right — summary + payment */}
                 <div className="space-y-4">
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-3">
                         <h3 className="text-sm font-semibold text-gray-900">Order Summary</h3>
@@ -536,19 +449,35 @@ export default function NewOrder() {
                     </div>
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
                         <h3 className="text-sm font-semibold text-gray-900">Payment</h3>
-                        <div><label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid Now (₦)</label><input type="number" value={form.amount_paid} onChange={e => setForm({ ...form, amount_paid: e.target.value })} placeholder="0 if not paid yet" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid Now (₦)</label>
+                            <input type="number" value={form.amount_paid} onChange={e => setForm({ ...form, amount_paid: e.target.value })} placeholder="0 if not paid yet"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
                         {amountPaid > 0 && (
-                            <div><label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label><select value={form.payment_method} onChange={e => setForm({ ...form, payment_method: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">{PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}</select></div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                                <select value={form.payment_method} onChange={e => setForm({ ...form, payment_method: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                    {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                </select>
+                            </div>
                         )}
                         {totalAmount > 0 && (
                             <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
                                 <div className="flex justify-between"><span className="text-gray-500">Paid</span><span className="font-medium text-green-600">₦{amountPaid.toLocaleString()}</span></div>
                                 <div className="flex justify-between"><span className="text-gray-500">Balance Due</span><span className={`font-bold ${balanceDue > 0 ? 'text-red-500' : 'text-green-600'}`}>₦{balanceDue.toLocaleString()}</span></div>
-                                <div className="flex justify-between pt-1 border-t border-gray-200"><span className="text-gray-500">Status</span><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${paymentStatus === 'paid' ? 'bg-green-100 text-green-700' : paymentStatus === 'part_paid' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>{paymentStatus === 'part_paid' ? 'Part Paid' : paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}</span></div>
+                                <div className="flex justify-between pt-1 border-t border-gray-200">
+                                    <span className="text-gray-500">Status</span>
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${paymentStatus === 'paid' ? 'bg-green-100 text-green-700' : paymentStatus === 'part_paid' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
+                                        {paymentStatus === 'part_paid' ? 'Part Paid' : paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}
+                                    </span>
+                                </div>
                             </div>
                         )}
                     </div>
-                    <button onClick={handleSubmit} disabled={loading} className="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50">{loading ? 'Creating Order...' : 'Create Order →'}</button>
+                    <button onClick={handleSubmit} disabled={loading} className="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50">
+                        {loading ? 'Creating Order...' : 'Create Order →'}
+                    </button>
                 </div>
             </div>
         </PageWrapper>

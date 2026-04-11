@@ -29,18 +29,18 @@ import AuditLogs from '../pages/audit-logs/AuditLogs'
 import WaitingList from '../pages/WaitingList'
 import LandingPage from '../pages/LandingPage'
 
-// ── Guards ────────────────────────────────────────────────────────────────────
+// ── Guards ─────────────────────────────────────────────────────────────────────
 
 function PrivateRoute({ children }) {
     const { user, loading } = useAuth()
-    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Loading...</div>
+    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500 text-sm">Loading...</div>
     return user ? children : <Navigate to="/login" />
 }
 
 // AdminRoute specifically for super_admin
 function AdminRoute({ children }) {
     const { user, profile, loading } = useAuth()
-    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Loading...</div>
+    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500 text-sm">Loading...</div>
     if (!user) return <Navigate to="/login" />
     if (profile?.role !== 'super_admin') return <Navigate to="/dashboard" />
     return children
@@ -48,7 +48,7 @@ function AdminRoute({ children }) {
 
 function RoleRoute({ children, module }) {
     const { user, profile, loading, hasAccess } = useAuth()
-    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Loading...</div>
+    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500 text-sm">Loading...</div>
     if (!user) return <Navigate to="/login" />
 
     // Super admin bypasses all role checks
@@ -68,37 +68,38 @@ function RoleRoute({ children, module }) {
 
 function OnboardingGuard({ children }) {
     const { user, profile, loading } = useAuth()
-    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Loading...</div>
+    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500 text-sm">Loading...</div>
     if (!user) return <Navigate to="/login" />
     if (profile?.business_id) return <Navigate to="/dashboard" />
     return children
 }
 
 /**
- * VendorRoute
+ * VendorRoute — guards vendor-only pages with optional plan feature check.
  *
- * Wraps vendor-only pages. Requires auth.
- * Optionally accepts a `feature` key from vendorPlanLimits.js —
- * if the vendor's current tier doesn't have access, shows an
- * upgrade prompt instead of the page.
+ * - No `feature` prop → just requires auth (all vendor tiers pass)
+ * - With `feature` prop → checks vendorCanAccess(tier, feature, status)
+ *   so trialing vendors always get full Scale access
  *
- * Usage:
- *   <Route path="/payments" element={<VendorRoute feature="paymentsPage"><Payments /></VendorRoute>} />
- *   <Route path="/orders"   element={<VendorRoute><Orders /></VendorRoute>} />  // no plan gate
+ * Feature → Min tier reference:
+ *   orders, inventory, customers, invoices, importData  → all tiers (no gate)
+ *   paymentsPage, reports, fullReports                  → Hustle+
+ *   storefront, csvExport                               → Scale only
  */
 function VendorRoute({ children, feature }) {
     const { user, profile, loading } = useAuth()
     const navigate = useNavigate()
 
-    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Loading...</div>
+    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500 text-sm">Loading...</div>
     if (!user) return <Navigate to="/login" />
 
-    // Feature gating — only checked if a feature key is provided
     if (feature) {
         const tier = profile?.businesses?.subscription_tier ?? 'solo'
-        const hasAccess = vendorCanAccess(tier, feature)
+        // ALWAYS pass subStatus — this is what makes trialing = Scale work
+        const subStatus = profile?.subscription?.status ?? 'inactive'
+        const canAccess = vendorCanAccess(tier, feature, subStatus)
 
-        if (!hasAccess) {
+        if (!canAccess) {
             const min = minTierForFeature(feature)
             const minLabel = min ? min.charAt(0).toUpperCase() + min.slice(1) : 'higher'
 
@@ -106,12 +107,9 @@ function VendorRoute({ children, feature }) {
                 <PageWrapper title="Upgrade Required">
                     <div className="flex flex-col items-center justify-center py-20 space-y-4 text-center max-w-sm mx-auto">
                         <span className="text-5xl">🔒</span>
-                        <h2 className="text-lg font-bold text-gray-900">
-                            {minLabel} plan required
-                        </h2>
+                        <h2 className="text-lg font-bold text-gray-900">{minLabel} plan required</h2>
                         <p className="text-sm text-gray-500 leading-relaxed">
                             This feature is available on the <span className="font-semibold">{minLabel}</span> plan and above.
-                            Upgrade to unlock it.
                         </p>
                         <button
                             onClick={() => navigate('/settings/billing')}
@@ -119,10 +117,7 @@ function VendorRoute({ children, feature }) {
                         >
                             Upgrade Plan →
                         </button>
-                        <button
-                            onClick={() => navigate('/dashboard')}
-                            className="text-sm text-gray-400 hover:underline"
-                        >
+                        <button onClick={() => navigate('/dashboard')} className="text-sm text-gray-400 hover:underline">
                             Back to Dashboard
                         </button>
                     </div>
@@ -134,7 +129,7 @@ function VendorRoute({ children, feature }) {
     return children
 }
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── Route tree ─────────────────────────────────────────────────────────────────
 
 export default function AppRoutes() {
     return (
@@ -174,7 +169,7 @@ export default function AppRoutes() {
             <Route path="/import" element={<RoleRoute module="import"><Import /></RoleRoute>} />
             <Route path="/audit-logs" element={<RoleRoute module="reports"><AuditLogs /></RoleRoute>} />
 
-            {/* ── Vendor routes — all tiers (auth required, no role restriction) ── */}
+            {/* ── Vendor — all tiers (no plan gate) ── */}
             <Route path="/orders" element={<VendorRoute><Orders /></VendorRoute>} />
             <Route path="/orders/new" element={<VendorRoute><NewOrder /></VendorRoute>} />
             <Route path="/orders/:id" element={<VendorRoute><OrderDetail /></VendorRoute>} />
@@ -182,12 +177,19 @@ export default function AppRoutes() {
             <Route path="/invoices/:id" element={<VendorRoute><InvoiceDetail /></VendorRoute>} />
             <Route path="/delivery" element={<VendorRoute><DeliveryHub /></VendorRoute>} />
 
-            {/* ── Vendor routes — Hustle+ ── */}
+            {/* Inventory and Import are available to all vendor tiers.
+                No feature gate needed — VendorInventory enforces product limits internally. */}
+            <Route path="/inventory" element={<VendorRoute><Inventory /></VendorRoute>} />
+
+            {/* ── Vendor — Hustle+ ── */}
             <Route path="/payments" element={
                 <VendorRoute feature="paymentsPage"><Payments /></VendorRoute>
             } />
+            <Route path="/reports" element={
+                <VendorRoute feature="reports"><Reports /></VendorRoute>
+            } />
 
-            {/* ── Vendor routes — Scale only ── */}
+            {/* ── Vendor — Scale only ── */}
             <Route path="/storefront" element={
                 <VendorRoute feature="storefront"><Storefront /></VendorRoute>
             } />
