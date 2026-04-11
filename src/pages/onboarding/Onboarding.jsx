@@ -19,7 +19,6 @@ const BUSINESS_MODES = [
     },
 ]
 
-// ─── Retail Business Types (expanded) ────────────────────────────────────────
 const RETAIL_TYPES = [
     { value: 'retail', label: '🛒 Retail Shop' },
     { value: 'restaurant', label: '🍽️ Restaurant / Food' },
@@ -30,7 +29,6 @@ const RETAIL_TYPES = [
     { value: 'others', label: '➕ Others' },
 ]
 
-// ─── Vendor Categories (expanded) ────────────────────────────────────────────
 const VENDOR_CATEGORIES = [
     { value: 'fashion', label: '👗 Fashion & Clothing' },
     { value: 'shoes', label: '👟 Shoes & Footwear' },
@@ -53,7 +51,6 @@ const VENDOR_CATEGORIES = [
     { value: 'others', label: '➕ Others — type your own' },
 ]
 
-// ─── Retail Plans ─────────────────────────────────────────────────────────────
 const RETAIL_PLANS = [
     {
         tier: 'starter',
@@ -86,7 +83,6 @@ const RETAIL_PLANS = [
     },
 ]
 
-// ─── Online Vendor Plans ──────────────────────────────────────────────────────
 const VENDOR_PLANS = [
     {
         tier: 'solo',
@@ -119,7 +115,6 @@ const VENDOR_PLANS = [
     },
 ]
 
-// ─── Steps ────────────────────────────────────────────────────────────────────
 const RETAIL_STEPS = ['Business Info', 'Contact & Address', 'Main Branch', 'Choose Plan', 'Payment']
 const VENDOR_STEPS = ['Business Info', 'Contact & Address', 'Choose Plan', 'Start Trial']
 
@@ -153,30 +148,18 @@ export default function Onboarding() {
     const currentCategories = isVendor ? VENDOR_CATEGORIES : RETAIL_TYPES
     const showOthersField = form.business_type === 'others'
 
-    // Load Paystack inline script
     useEffect(() => {
         const script = document.createElement('script')
         script.src = 'https://js.paystack.co/v1/inline.js'
         script.async = true
-
-        script.onload = () => {
-            setPaystackReady(true)
-        }
-
-        script.onerror = () => {
-            setError('Payment system failed to load. Please refresh the page.')
-        }
-
+        script.onload = () => setPaystackReady(true)
+        script.onerror = () => setError('Payment system failed to load. Please refresh the page.')
         document.body.appendChild(script)
 
         return () => {
-            const existingScript = document.querySelector('script[src*="paystack"]')
-            if (existingScript && document.body.contains(existingScript)) {
-                document.body.removeChild(existingScript)
-            }
-            if (logoPreview) {
-                URL.revokeObjectURL(logoPreview)
-            }
+            const existing = document.querySelector('script[src*="paystack"]')
+            if (existing && document.body.contains(existing)) document.body.removeChild(existing)
+            if (logoPreview) URL.revokeObjectURL(logoPreview)
         }
     }, [])
 
@@ -187,28 +170,20 @@ export default function Onboarding() {
     function handleLogoChange(e) {
         const file = e.target.files[0]
         if (!file) return
-
-        if (logoPreview) {
-            URL.revokeObjectURL(logoPreview)
-        }
-
+        if (logoPreview) URL.revokeObjectURL(logoPreview)
         setLogoFile(file)
         setLogoPreview(URL.createObjectURL(file))
     }
 
     function nextStep() {
         setError('')
-
         if (step === 1 && !form.business_mode) return setError('Please select how you run your business')
         if (step === 1 && !form.business_name.trim()) return setError('Business name is required')
         if (step === 1 && !form.business_type) return setError('Please select what you sell')
         if (step === 1 && form.business_type === 'others' && !customBusinessType.trim()) return setError('Please describe what you sell')
-
         if (!isVendor && step === 3 && !form.branch_name.trim()) return setError('Branch name is required')
-
         const planStep = isVendor ? 3 : 4
         if (step === planStep && !selectedPlan) return setError('Please select a plan to continue')
-
         setStep(step + 1)
     }
 
@@ -217,10 +192,10 @@ export default function Onboarding() {
         setStep(step - 1)
     }
 
-    async function setupBusiness() {
-        setLoading(true)
-        setError('')
-
+    // ── Creates business, branch, profile link, and subscription ────────────
+    // For vendors: called immediately (no payment needed for trial)
+    // For retail: called INSIDE the Paystack callback AFTER payment succeeds
+    async function setupBusiness({ tier, status, isTrial = false, trialStart = null, trialEnd = null }) {
         try {
             let logo_url = null
             if (logoFile) {
@@ -229,11 +204,8 @@ export default function Onboarding() {
                 const { error: uploadError } = await supabase.storage
                     .from('business-logos')
                     .upload(path, logoFile, { upsert: true })
-
                 if (!uploadError) {
-                    const { data: urlData } = supabase.storage
-                        .from('business-logos')
-                        .getPublicUrl(path)
+                    const { data: urlData } = supabase.storage.from('business-logos').getPublicUrl(path)
                     logo_url = urlData.publicUrl
                 }
             }
@@ -253,7 +225,6 @@ export default function Onboarding() {
                 })
                 .select()
                 .single()
-
             if (bizError) throw bizError
 
             const branchName = isVendor ? 'Online Store' : form.branch_name.trim()
@@ -267,95 +238,85 @@ export default function Onboarding() {
                 })
                 .select()
                 .single()
-
             if (branchError) throw branchError
 
             const { error: profileError } = await supabase
                 .from('profiles')
-                .update({
-                    business_id: business.id,
-                    branch_id: branch.id,
-                })
+                .update({ business_id: business.id, branch_id: branch.id })
                 .eq('id', user.id)
-
             if (profileError) throw profileError
+
+            const { error: subError } = await supabase
+                .from('subscriptions')
+                .insert({
+                    business_id: business.id,
+                    tier,
+                    status,
+                    is_trial: isTrial,
+                    trial_start: trialStart,
+                    trial_end: trialEnd,
+                })
+            if (subError) throw subError
 
             try {
                 await supabase.rpc('seed_expense_categories', { p_business_id: business.id })
-            } catch (rpcError) {
-                // Silently handle RPC error
-            }
+            } catch { /* non-critical */ }
 
             return { business, branch }
         } catch (err) {
-            setError(err.message)
-            setLoading(false)
-            return null
+            throw err
         }
     }
 
+    // ── Vendor: start 14-day trial immediately, no payment ───────────────────
     async function handleStartTrial() {
         setError('')
-        const result = await setupBusiness()
-        if (!result) return
+        setLoading(true)
 
-        const now = new Date()
-        const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+        try {
+            const now = new Date()
+            const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
-        const { error: subError } = await supabase
-            .from('subscriptions')
-            .insert({
-                business_id: result.business.id,
+            await setupBusiness({
                 tier: 'scale',
                 status: 'trialing',
-                is_trial: true,
-                trial_start: now.toISOString(),
-                trial_end: trialEnd.toISOString(),
+                isTrial: true,
+                trialStart: now.toISOString(),
+                trialEnd: trialEnd.toISOString(),
             })
 
-        if (subError) {
-            setError(subError.message)
+            await fetchProfile(user.id)
+            navigate('/dashboard')
+        } catch (err) {
+            setError(err.message)
+        } finally {
             setLoading(false)
-            return
         }
-
-        await fetchProfile(user.id)
-        setLoading(false)
-        navigate('/dashboard')
     }
 
+    // ── Retail: open Paystack, create business ONLY after successful payment ──
     async function handlePayment() {
         setError('')
 
         if (!paystackReady || !window.PaystackPop) {
-            setError('Payment system is still loading. Please wait a moment.')
+            setError('Payment system is still loading. Please wait a moment and try again.')
             return
         }
 
-        const result = await setupBusiness()
-        if (!result) return
+        setLoading(true)
 
-        const { error: subError } = await supabase
-            .from('subscriptions')
-            .insert({
-                business_id: result.business.id,
-                tier: selectedPlan.tier,
-                status: 'inactive',
-            })
-
-        if (subError) {
-            setError(subError.message)
+        // Validate everything before opening Paystack
+        if (!selectedPlan) {
+            setError('Please select a plan.')
             setLoading(false)
             return
         }
 
-        const planCode = billingInterval === 'yearly'
-            ? selectedPlan.yearlyCode
-            : selectedPlan.monthlyCode
+        const planCode = billingInterval === 'yearly' ? selectedPlan.yearlyCode : selectedPlan.monthlyCode
+        const amount = billingInterval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice
 
-        const amount = billingInterval === 'yearly'
-            ? selectedPlan.yearlyPrice
-            : selectedPlan.monthlyPrice
+        // Brief delay to let loading state render before Paystack iframe opens
+        await new Promise(resolve => setTimeout(resolve, 100))
 
         setLoading(false)
 
@@ -366,33 +327,38 @@ export default function Onboarding() {
             plan: planCode,
             currency: 'NGN',
             channels: ['card'],
-            ref: `VTX-${result.business.id.slice(0, 8)}-${Date.now()}`,
+            ref: `VTX-${user.id.slice(0, 8)}-${Date.now()}`,
             metadata: {
-                business_id: result.business.id,
+                user_id: user.id,
                 tier: selectedPlan.tier,
                 interval: billingInterval,
                 mode: form.business_mode,
             },
             onClose: () => {
-                setError('Payment was cancelled. Your account has been created but your subscription is inactive. Go to Settings → Billing to complete payment and activate your account.')
-                setLoading(false)
-                fetchProfile(user.id).then(() => navigate('/dashboard'))
+                // User dismissed Paystack — nothing created yet, they can try again
+                setError('Payment was cancelled. You can try again when ready.')
             },
             callback: function () {
+                // ── Payment successful — NOW create the business ──────────────
+                // Wrapped in plain function because Paystack rejects async callbacks
                 async function onSuccess() {
-                    await supabase
-                        .from('subscriptions')
-                        .update({
-                            status: 'active',
+                    setLoading(true)
+                    try {
+                        await setupBusiness({
                             tier: selectedPlan.tier,
-                            is_trial: false,
-                            trial_start: null,
-                            trial_end: null,
+                            status: 'active',
                         })
-                        .eq('business_id', result.business.id)
-
-                    await fetchProfile(user.id)
-                    navigate('/dashboard')
+                        await fetchProfile(user.id)
+                        navigate('/dashboard')
+                    } catch (err) {
+                        // Payment went through but business creation failed.
+                        // Show a clear message so they can contact support.
+                        setError(
+                            `Payment was successful but setup encountered an error: ${err.message}. ` +
+                            `Please contact support with your email address and we'll sort it out immediately.`
+                        )
+                        setLoading(false)
+                    }
                 }
                 onSuccess()
             },
@@ -402,11 +368,8 @@ export default function Onboarding() {
     }
 
     function handleFinalStep() {
-        if (isVendor) {
-            handleStartTrial()
-        } else {
-            handlePayment()
-        }
+        if (isVendor) handleStartTrial()
+        else handlePayment()
     }
 
     const totalSteps = STEPS.length
@@ -414,28 +377,23 @@ export default function Onboarding() {
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
             <div className={`bg-white rounded-2xl shadow w-full ${step === (isVendor ? 3 : 4) ? 'max-w-3xl' : 'max-w-lg'} p-8 transition-all duration-300`}>
-                {/* Logo Header */}
+
+                {/* Logo */}
                 <div className="flex flex-col items-center justify-center mb-8 pb-4 border-b border-gray-100">
                     <img src="/logo.png" alt="Vortex" className="h-16 w-16 object-contain mb-3" />
-                    <span className="text-xl font-bold bg-linear-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                        Vortex
-                    </span>
+                    <span className="text-xl font-bold bg-linear-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">Vortex</span>
                 </div>
+
                 {/* Header */}
                 <div className="mb-6">
                     <h1 className="text-2xl font-bold text-gray-900">Set up your business</h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Step {step} of {totalSteps} — {STEPS[step - 1]}
-                    </p>
+                    <p className="text-sm text-gray-500 mt-1">Step {step} of {totalSteps} — {STEPS[step - 1]}</p>
                 </div>
 
-                {/* Progress bar */}
+                {/* Progress */}
                 <div className="flex gap-2 mb-8">
                     {STEPS.map((_, i) => (
-                        <div
-                            key={i}
-                            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${i + 1 <= step ? 'bg-blue-600' : 'bg-gray-200'}`}
-                        />
+                        <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${i + 1 <= step ? 'bg-blue-600' : 'bg-gray-200'}`} />
                     ))}
                 </div>
 
@@ -445,51 +403,33 @@ export default function Onboarding() {
                     </div>
                 )}
 
-                {/* Step 1 — Business Info */}
+                {/* ── Step 1: Business Info ── */}
                 {step === 1 && (
                     <div className="space-y-6">
-                        {/* Mode selection */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">How do you run your business?</label>
                             <div className="grid grid-cols-1 gap-3">
-                                {BUSINESS_MODES.map((mode) => (
-                                    <button
-                                        key={mode.value}
-                                        type="button"
-                                        onClick={() => {
-                                            setForm({ ...form, business_mode: mode.value, business_type: '' })
-                                            setSelectedPlan(null)
-                                            setCustomBusinessType('')
-                                        }}
-                                        className={`border-2 rounded-xl px-4 py-3 text-left transition flex items-start gap-3 ${form.business_mode === mode.value
-                                            ? 'border-blue-600 bg-blue-50'
-                                            : 'border-gray-200 hover:border-blue-300'
-                                            }`}
+                                {BUSINESS_MODES.map(mode => (
+                                    <button key={mode.value} type="button"
+                                        onClick={() => { setForm({ ...form, business_mode: mode.value, business_type: '' }); setSelectedPlan(null); setCustomBusinessType('') }}
+                                        className={`border-2 rounded-xl px-4 py-3 text-left transition flex items-start gap-3 ${form.business_mode === mode.value ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}
                                     >
                                         <span className="text-2xl mt-0.5">{mode.icon}</span>
                                         <div>
-                                            <p className={`text-sm font-semibold ${form.business_mode === mode.value ? 'text-blue-700' : 'text-gray-800'}`}>
-                                                {mode.label}
-                                            </p>
+                                            <p className={`text-sm font-semibold ${form.business_mode === mode.value ? 'text-blue-700' : 'text-gray-800'}`}>{mode.label}</p>
                                             <p className="text-xs text-gray-500 mt-0.5">{mode.desc}</p>
                                         </div>
-                                        {form.business_mode === mode.value && (
-                                            <span className="ml-auto text-blue-600 text-lg self-center">✓</span>
-                                        )}
+                                        {form.business_mode === mode.value && <span className="ml-auto text-blue-600 text-lg self-center">✓</span>}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Logo */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Business Logo (optional)</label>
                             <div className="flex items-center gap-4">
                                 <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50">
-                                    {logoPreview
-                                        ? <img src={logoPreview} alt="logo" className="w-full h-full object-cover" />
-                                        : <span className="text-2xl">🏢</span>
-                                    }
+                                    {logoPreview ? <img src={logoPreview} alt="logo" className="w-full h-full object-cover" /> : <span className="text-2xl">🏢</span>}
                                 </div>
                                 <label className="cursor-pointer text-sm text-blue-600 font-medium hover:underline">
                                     Upload logo
@@ -498,39 +438,23 @@ export default function Onboarding() {
                             </div>
                         </div>
 
-                        {/* Business name */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Business Name <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                name="business_name"
-                                value={form.business_name}
-                                onChange={handleChange}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Business Name <span className="text-red-500">*</span></label>
+                            <input name="business_name" value={form.business_name} onChange={handleChange}
                                 placeholder={isVendor ? "e.g. Adaeze's Closet" : "e.g. Mama Tee's Kitchen"}
-                            />
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
 
-                        {/* Business type — conditional */}
                         {form.business_mode && (
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                     {isVendor ? 'What do you sell?' : 'Business Type'} <span className="text-red-500">*</span>
                                 </label>
                                 <div className="grid grid-cols-2 gap-2">
-                                    {currentCategories.map((type) => (
-                                        <button
-                                            key={type.value}
-                                            type="button"
-                                            onClick={() => {
-                                                setForm({ ...form, business_type: type.value })
-                                                if (type.value !== 'others') setCustomBusinessType('')
-                                            }}
-                                            className={`border rounded-lg px-3 py-2.5 text-sm font-medium transition text-left ${form.business_type === type.value
-                                                ? 'border-blue-600 bg-blue-50 text-blue-700'
-                                                : 'border-gray-300 text-gray-700 hover:border-gray-400'
-                                                }`}
+                                    {currentCategories.map(type => (
+                                        <button key={type.value} type="button"
+                                            onClick={() => { setForm({ ...form, business_type: type.value }); if (type.value !== 'others') setCustomBusinessType('') }}
+                                            className={`border rounded-lg px-3 py-2.5 text-sm font-medium transition text-left ${form.business_type === type.value ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700 hover:border-gray-400'}`}
                                         >
                                             {type.label}
                                         </button>
@@ -538,13 +462,10 @@ export default function Onboarding() {
                                 </div>
                                 {showOthersField && (
                                     <div className="mt-3">
-                                        <input
-                                            value={customBusinessType}
-                                            onChange={e => setCustomBusinessType(e.target.value)}
+                                        <input value={customBusinessType} onChange={e => setCustomBusinessType(e.target.value)}
                                             placeholder={isVendor ? 'e.g. Handmade candles, Custom cakes...' : 'e.g. Laundry service, Event planning...'}
                                             className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50"
-                                            autoFocus
-                                        />
+                                            autoFocus />
                                         <p className="text-xs text-gray-400 mt-1">Describe what you sell in a few words</p>
                                     </div>
                                 )}
@@ -553,139 +474,68 @@ export default function Onboarding() {
                     </div>
                 )}
 
-                {/* Step 2 — Contact & Address */}
+                {/* ── Step 2: Contact ── */}
                 {step === 2 && (
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Business Email</label>
-                            <input
-                                name="email"
-                                type="email"
-                                value={form.email}
-                                onChange={handleChange}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="business@example.com"
-                            />
+                            <input name="email" type="email" value={form.email} onChange={handleChange} placeholder="business@example.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                            <input
-                                name="phone"
-                                type="tel"
-                                value={form.phone}
-                                onChange={handleChange}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="08012345678"
-                            />
+                            <input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="08012345678" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                {isVendor ? 'Your Location / Operating Address' : 'Business Address'}
-                            </label>
-                            <textarea
-                                name="address"
-                                value={form.address}
-                                onChange={handleChange}
-                                rows={3}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                                placeholder="12 Akin Adesola Street, Victoria Island, Lagos"
-                            />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{isVendor ? 'Your Location / Operating Address' : 'Business Address'}</label>
+                            <textarea name="address" value={form.address} onChange={handleChange} rows={3} placeholder="12 Akin Adesola Street, Victoria Island, Lagos" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                         </div>
                     </div>
                 )}
 
-                {/* Step 3 — Main Branch (retail only) */}
+                {/* ── Step 3: Main Branch (retail only) ── */}
                 {!isVendor && step === 3 && (
                     <div className="space-y-4">
-                        <p className="text-sm text-gray-500">
-                            Every business starts with a main branch. You can add more branches later from your settings.
-                        </p>
+                        <p className="text-sm text-gray-500">Every business starts with a main branch. You can add more branches later from your settings.</p>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
-                            <input
-                                name="branch_name"
-                                value={form.branch_name}
-                                onChange={handleChange}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="e.g. Main Branch, HQ, Ikeja Branch"
-                            />
+                            <input name="branch_name" value={form.branch_name} onChange={handleChange} placeholder="e.g. Main Branch, HQ, Ikeja Branch" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                     </div>
                 )}
 
-                {/* Choose Plan step */}
+                {/* ── Choose Plan step ── */}
                 {((isVendor && step === 3) || (!isVendor && step === 4)) && (
                     <div className="space-y-5">
                         <div className="flex items-center justify-center gap-3">
-                            <button
-                                onClick={() => setBillingInterval('monthly')}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'monthly'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
-                                    }`}
-                            >
-                                Monthly
-                            </button>
-                            <button
-                                onClick={() => setBillingInterval('yearly')}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'yearly'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
-                                    }`}
-                            >
-                                Yearly
-                                <span className="ml-2 text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full font-semibold">
-                                    15% off
-                                </span>
-                            </button>
+                            {['monthly', 'yearly'].map(interval => (
+                                <button key={interval} onClick={() => setBillingInterval(interval)}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === interval ? 'bg-blue-600 text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+                                    {interval === 'yearly' ? <>Yearly <span className="ml-2 text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full font-semibold">15% off</span></> : 'Monthly'}
+                                </button>
+                            ))}
                         </div>
-
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             {PLANS.map(plan => {
                                 const price = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
-                                const monthlyEquiv = billingInterval === 'yearly'
-                                    ? Math.round(plan.yearlyPrice / 12).toLocaleString()
-                                    : null
+                                const monthlyEquiv = billingInterval === 'yearly' ? Math.round(plan.yearlyPrice / 12).toLocaleString() : null
                                 const isSelected = selectedPlan?.tier === plan.tier
-
                                 return (
-                                    <button
-                                        key={plan.tier}
-                                        onClick={() => setSelectedPlan(plan)}
-                                        className={`border-2 rounded-xl p-4 text-left transition relative ${isSelected
-                                            ? 'border-blue-600 bg-blue-50'
-                                            : 'border-gray-200 hover:border-blue-300'
-                                            }`}
-                                    >
-                                        {plan.badge && (
-                                            <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">
-                                                {plan.badge}
-                                            </span>
-                                        )}
+                                    <button key={plan.tier} onClick={() => setSelectedPlan(plan)}
+                                        className={`border-2 rounded-xl p-4 text-left transition relative ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}>
+                                        {plan.badge && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">{plan.badge}</span>}
                                         <div className="flex items-center justify-between mb-2">
                                             <h3 className="text-sm font-bold text-gray-900">{plan.name}</h3>
                                             {isSelected && <span className="text-blue-600 text-lg">✓</span>}
                                         </div>
-                                        <p className="text-xl font-bold text-gray-900">
-                                            ₦{price.toLocaleString()}
-                                            <span className="text-xs font-normal text-gray-400">/{billingInterval === 'yearly' ? 'yr' : 'mo'}</span>
-                                        </p>
-                                        {monthlyEquiv && (
-                                            <p className="text-xs text-green-600 mb-2">₦{monthlyEquiv}/mo</p>
-                                        )}
+                                        <p className="text-xl font-bold text-gray-900">₦{price.toLocaleString()}<span className="text-xs font-normal text-gray-400">/{billingInterval === 'yearly' ? 'yr' : 'mo'}</span></p>
+                                        {monthlyEquiv && <p className="text-xs text-green-600 mb-2">₦{monthlyEquiv}/mo</p>}
                                         <ul className="mt-2 space-y-1">
-                                            {plan.features.map(f => (
-                                                <li key={f} className="text-xs text-gray-500 flex items-start gap-1">
-                                                    <span className="text-green-500 shrink-0">✓</span> {f}
-                                                </li>
-                                            ))}
+                                            {plan.features.map(f => <li key={f} className="text-xs text-gray-500 flex items-start gap-1"><span className="text-green-500 shrink-0">✓</span> {f}</li>)}
                                         </ul>
                                     </button>
                                 )
                             })}
                         </div>
-
-                        {/* Vendor trial nudge */}
                         {isVendor && (
                             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
                                 <span className="text-lg">🎁</span>
@@ -697,7 +547,7 @@ export default function Onboarding() {
                     </div>
                 )}
 
-                {/* Vendor trial step */}
+                {/* ── Vendor Trial Step ── */}
                 {isVendor && step === 4 && (
                     <div className="space-y-5">
                         <div className="bg-linear-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 text-center space-y-3">
@@ -709,99 +559,63 @@ export default function Onboarding() {
                             <div className="bg-white rounded-xl border border-blue-100 px-4 py-3 text-left space-y-2">
                                 <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">What's included in your trial</p>
                                 {VENDOR_PLANS.find(p => p.tier === 'scale')?.features.map(f => (
-                                    <p key={f} className="text-xs text-gray-600 flex items-center gap-2">
-                                        <span className="text-blue-500">✓</span> {f}
-                                    </p>
+                                    <p key={f} className="text-xs text-gray-600 flex items-center gap-2"><span className="text-blue-500">✓</span> {f}</p>
                                 ))}
                             </div>
                             <p className="text-xs text-gray-400">No credit card required. After 14 days, choose a plan to continue.</p>
                         </div>
-
-                        {selectedPlan && (
+                        {selectedPlan ? (
                             <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3 flex items-center justify-between">
                                 <div>
                                     <p className="text-xs text-gray-500">Your plan after trial</p>
-                                    <p className="text-sm font-semibold text-gray-800">
-                                        {selectedPlan.name} — ₦{(billingInterval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice).toLocaleString()}/{billingInterval === 'yearly' ? 'yr' : 'mo'}
-                                    </p>
+                                    <p className="text-sm font-semibold text-gray-800">{selectedPlan.name} — ₦{(billingInterval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice).toLocaleString()}/{billingInterval === 'yearly' ? 'yr' : 'mo'}</p>
                                 </div>
-                                <button
-                                    onClick={() => setStep(step - 1)}
-                                    className="text-xs text-blue-600 hover:underline"
-                                >
-                                    Change
-                                </button>
+                                <button onClick={() => setStep(step - 1)} className="text-xs text-blue-600 hover:underline">Change</button>
                             </div>
-                        )}
-
-                        {!selectedPlan && (
-                            <p className="text-xs text-center text-gray-400">
-                                You didn't select a plan — you can do that later from Settings → Billing when your trial ends.
-                            </p>
+                        ) : (
+                            <p className="text-xs text-center text-gray-400">You didn't select a plan — you can choose one from Settings → Billing when your trial ends.</p>
                         )}
                     </div>
                 )}
 
-                {/* Retail payment step */}
+                {/* ── Retail Payment Summary Step ── */}
                 {!isVendor && step === 5 && selectedPlan && (
                     <div className="space-y-5">
                         <div className="bg-blue-50 rounded-xl p-5 space-y-3">
                             <h3 className="text-sm font-semibold text-gray-900">Order Summary</h3>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Plan</span>
-                                <span className="font-medium text-gray-900 capitalize">{selectedPlan.name}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Billing</span>
-                                <span className="font-medium text-gray-900 capitalize">{billingInterval}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Business</span>
-                                <span className="font-medium text-gray-900">{form.business_name}</span>
-                            </div>
+                            <div className="flex justify-between text-sm"><span className="text-gray-600">Plan</span><span className="font-medium text-gray-900 capitalize">{selectedPlan.name}</span></div>
+                            <div className="flex justify-between text-sm"><span className="text-gray-600">Billing</span><span className="font-medium text-gray-900 capitalize">{billingInterval}</span></div>
+                            <div className="flex justify-between text-sm"><span className="text-gray-600">Business</span><span className="font-medium text-gray-900">{form.business_name}</span></div>
                             <div className="border-t border-blue-100 pt-3 flex justify-between">
                                 <span className="text-sm font-semibold text-gray-900">Total</span>
-                                <span className="text-xl font-bold text-blue-600">
-                                    ₦{(billingInterval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice).toLocaleString()}
-                                </span>
+                                <span className="text-xl font-bold text-blue-600">₦{(billingInterval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice).toLocaleString()}</span>
                             </div>
                         </div>
                         <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500 space-y-1">
                             <p>✓ Secure payment powered by Paystack</p>
                             <p>✓ Auto-renews {billingInterval === 'yearly' ? 'annually' : 'monthly'} — cancel anytime</p>
-                            <p>✓ Access starts immediately after payment</p>
+                            <p>✓ Your account is created immediately after payment</p>
                         </div>
                     </div>
                 )}
 
-                {/* Navigation */}
+                {/* ── Navigation ── */}
                 <div className="flex gap-3 mt-8">
                     {step > 1 && (
-                        <button
-                            type="button"
-                            onClick={prevStep}
-                            disabled={loading}
-                            className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50"
-                        >
+                        <button type="button" onClick={prevStep} disabled={loading}
+                            className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50">
                             Back
                         </button>
                     )}
-
                     {step < totalSteps ? (
-                        <button
-                            type="button"
-                            onClick={nextStep}
-                            className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition"
-                        >
+                        <button type="button" onClick={nextStep}
+                            className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition">
                             Continue
                         </button>
                     ) : (
-                        <button
-                            type="button"
-                            onClick={handleFinalStep}
+                        <button type="button" onClick={handleFinalStep}
                             disabled={loading || (!isVendor && !paystackReady)}
-                            className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
+                            className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
                             {loading
                                 ? 'Setting up...'
                                 : isVendor
