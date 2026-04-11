@@ -62,14 +62,25 @@ const PLANS = [
 
 export default function Billing() {
     const { profile, user, fetchProfile } = useAuth()
-    const [interval, setInterval] = useState('monthly')
+    const [billingInterval, setBillingInterval] = useState('monthly')
     const [subscription, setSubscription] = useState(null)
     const [loading, setLoading] = useState(true)
     const [processingTier, setProcessingTier] = useState(null)
 
     const currentTier = subscription?.tier ?? 'starter'
 
-    useEffect(() => { fetchSubscription() }, [])
+    useEffect(() => {
+        fetchSubscription()
+    }, [])
+
+    // Load Paystack inline script
+    useEffect(() => {
+        const script = document.createElement('script')
+        script.src = 'https://js.paystack.co/v1/inline.js'
+        script.async = true
+        document.body.appendChild(script)
+        return () => document.body.removeChild(script)
+    }, [])
 
     async function fetchSubscription() {
         setLoading(true)
@@ -86,8 +97,11 @@ export default function Billing() {
         if (plan.tier === currentTier) return
         setProcessingTier(plan.tier)
 
-        const planCode = interval === 'yearly' ? plan.yearlyCode : plan.monthlyCode
-        const amount = interval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
+        const planCode = billingInterval === 'yearly' ? plan.yearlyCode : plan.monthlyCode
+        const amount = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
+
+        // FIXED: Use profile.business_id instead of result.business.id
+        const transactionRef = `VTX-${profile.business_id.slice(0, 8)}-${Date.now()}`
 
         const handler = window.PaystackPop.setup({
             key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
@@ -96,36 +110,37 @@ export default function Billing() {
             plan: planCode,
             currency: 'NGN',
             channels: ['card'],
-            ref: `VTX-${result.business.id.slice(0, 8)}-${Date.now()}`,
+            ref: transactionRef,
             metadata: {
                 business_id: profile.business_id,
                 tier: plan.tier,
-                interval,
+                interval: billingInterval,
             },
-            onClose: () => setProcessingTier(null),
+            onClose: () => {
+                setProcessingTier(null)
+            },
             callback: (response) => {
                 // Optimistically update subscription
                 supabase
                     .from('subscriptions')
-                    .update({ status: 'active', tier: plan.tier })
+                    .update({
+                        status: 'active',
+                        tier: plan.tier,
+                        paystack_subscription_code: response.reference || null
+                    })
                     .eq('business_id', profile.business_id)
                     .then(() => fetchProfile(user.id))
                     .then(() => fetchSubscription())
                     .then(() => setProcessingTier(null))
+                    .catch((err) => {
+                        console.error('Error updating subscription:', err)
+                        setProcessingTier(null)
+                    })
             },
         })
 
         handler.openIframe()
     }
-
-    // Load Paystack inline script
-    useEffect(() => {
-        const script = document.createElement('script')
-        script.src = 'https://js.paystack.co/v1/inline.js'
-        script.async = true
-        document.body.appendChild(script)
-        return () => document.body.removeChild(script)
-    }, [])
 
     const periodEnd = subscription?.current_period_end
         ? new Date(subscription.current_period_end).toLocaleDateString('en-NG', {
@@ -145,17 +160,21 @@ export default function Billing() {
                         <div className="flex items-center gap-3">
                             <span className="text-2xl font-bold text-gray-900 capitalize">{currentTier}</span>
                             <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${subscription?.status === 'active'
-                                ? 'bg-green-50 text-green-600'
-                                : 'bg-red-50 text-red-500'
+                                    ? 'bg-green-50 text-green-600'
+                                    : subscription?.status === 'trialing'
+                                        ? 'bg-blue-50 text-blue-600'
+                                        : 'bg-red-50 text-red-500'
                                 }`}>
-                                {subscription?.status ?? 'inactive'}
+                                {subscription?.status === 'trialing' ? 'Trial' : subscription?.status ?? 'inactive'}
                             </span>
                         </div>
                         {periodEnd && (
                             <p className="text-xs text-gray-400 mt-1">
                                 {subscription?.status === 'active'
                                     ? `Renews on ${periodEnd}`
-                                    : `Expired on ${periodEnd}`}
+                                    : subscription?.status === 'trialing'
+                                        ? `Trial ends on ${periodEnd}`
+                                        : `Expired on ${periodEnd}`}
                             </p>
                         )}
                     </div>
@@ -171,19 +190,19 @@ export default function Billing() {
             {/* Interval toggle */}
             <div className="flex items-center justify-center gap-3">
                 <button
-                    onClick={() => setInterval('monthly')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${interval === 'monthly'
-                        ? 'bg-blue-600 text-white'
-                        : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                    onClick={() => setBillingInterval('monthly')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'monthly'
+                            ? 'bg-blue-600 text-white'
+                            : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
                         }`}
                 >
                     Monthly
                 </button>
                 <button
-                    onClick={() => setInterval('yearly')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${interval === 'yearly'
-                        ? 'bg-blue-600 text-white'
-                        : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                    onClick={() => setBillingInterval('yearly')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'yearly'
+                            ? 'bg-blue-600 text-white'
+                            : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
                         }`}
                 >
                     Yearly
@@ -197,8 +216,8 @@ export default function Billing() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {PLANS.map(plan => {
                     const isCurrent = plan.tier === currentTier
-                    const price = interval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
-                    const monthlyEquiv = interval === 'yearly'
+                    const price = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
+                    const monthlyEquiv = billingInterval === 'yearly'
                         ? Math.round(plan.yearlyPrice / 12).toLocaleString()
                         : null
 
@@ -209,7 +228,7 @@ export default function Billing() {
                                 }`}
                         >
                             {/* Badge */}
-                            {plan.badge && (
+                            {plan.badge && !isCurrent && (
                                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs bg-blue-600 text-white px-3 py-1 rounded-full font-semibold whitespace-nowrap">
                                     {plan.badge}
                                 </span>
@@ -228,7 +247,7 @@ export default function Billing() {
                                         ₦{price.toLocaleString()}
                                     </span>
                                     <span className="text-sm text-gray-400">
-                                        /{interval === 'yearly' ? 'yr' : 'mo'}
+                                        /{billingInterval === 'yearly' ? 'yr' : 'mo'}
                                     </span>
                                 </div>
                                 {monthlyEquiv && (
@@ -251,8 +270,8 @@ export default function Billing() {
                                 onClick={() => handleUpgrade(plan)}
                                 disabled={isCurrent || processingTier === plan.tier}
                                 className={`w-full py-2.5 rounded-lg text-sm font-semibold transition ${isCurrent
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
                                     }`}
                             >
                                 {processingTier === plan.tier
