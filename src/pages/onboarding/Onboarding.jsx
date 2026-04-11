@@ -374,23 +374,27 @@ export default function Onboarding() {
                 mode: form.business_mode,
             },
             onClose: () => {
-                setError('Payment was cancelled. Your account has been created but your plan is inactive. Please complete payment from Settings → Billing.')
+                setError('Payment was cancelled. Your account has been created but your subscription is inactive. Go to Settings → Billing to complete payment and activate your account.')
+                setLoading(false)
                 fetchProfile(user.id).then(() => navigate('/dashboard'))
             },
-            callback: async () => {
-                await supabase
-                    .from('subscriptions')
-                    .update({
-                        status: 'active',
-                        tier: selectedPlan.tier,
-                        is_trial: false,
-                        trial_start: null,
-                        trial_end: null,
-                    })
-                    .eq('business_id', result.business.id)
+            callback: function () {
+                async function onSuccess() {
+                    await supabase
+                        .from('subscriptions')
+                        .update({
+                            status: 'active',
+                            tier: selectedPlan.tier,
+                            is_trial: false,
+                            trial_start: null,
+                            trial_end: null,
+                        })
+                        .eq('business_id', result.business.id)
 
-                await fetchProfile(user.id)
-                navigate('/dashboard')
+                    await fetchProfile(user.id)
+                    navigate('/dashboard')
+                }
+                onSuccess()
             },
         })
 
