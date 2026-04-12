@@ -8,8 +8,8 @@ const PLANS = [
         name: 'Starter',
         monthlyPrice: 8000,
         yearlyPrice: 81600,
-        monthlyCode: 'PLN_vgfmc26jpqa56dj',
-        yearlyCode: 'PLN_qo34f4txuqa2iny',
+        monthlyCode: 'PLN_grze6zv0gkw5euw',
+        yearlyCode: 'PLN_jz65z74pi7nvbxy',
         color: 'border-gray-200',
         badge: '',
         features: [
@@ -27,8 +27,8 @@ const PLANS = [
         name: 'Growth',
         monthlyPrice: 15000,
         yearlyPrice: 153000,
-        monthlyCode: 'PLN_oh48az761gii1ac',
-        yearlyCode: 'PLN_i1jl355wen3da47',
+        monthlyCode: 'PLN_2bym17e1gqq9a68',
+        yearlyCode: 'PLN_jvas4v10w9qx92w',
         color: 'border-blue-400',
         badge: 'Most Popular',
         features: [
@@ -45,8 +45,8 @@ const PLANS = [
         name: 'Business',
         monthlyPrice: 25000,
         yearlyPrice: 255000,
-        monthlyCode: 'PLN_rzmdyt42wkb1bxp',
-        yearlyCode: 'PLN_wy53l0wv0jewfyu',
+        monthlyCode: 'PLN_a2mnjvi7wom1oeu',
+        yearlyCode: 'PLN_j8xvl1sr93ufrmr',
         color: 'border-purple-400',
         badge: 'Best Value',
         features: [
@@ -160,10 +160,10 @@ export default function Billing() {
                         <div className="flex items-center gap-3">
                             <span className="text-2xl font-bold text-gray-900 capitalize">{currentTier}</span>
                             <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${subscription?.status === 'active'
-                                    ? 'bg-green-50 text-green-600'
-                                    : subscription?.status === 'trialing'
-                                        ? 'bg-blue-50 text-blue-600'
-                                        : 'bg-red-50 text-red-500'
+                                ? 'bg-green-50 text-green-600'
+                                : subscription?.status === 'trialing'
+                                    ? 'bg-blue-50 text-blue-600'
+                                    : 'bg-red-50 text-red-500'
                                 }`}>
                                 {subscription?.status === 'trialing' ? 'Trial' : subscription?.status ?? 'inactive'}
                             </span>
@@ -192,8 +192,8 @@ export default function Billing() {
                 <button
                     onClick={() => setBillingInterval('monthly')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'monthly'
-                            ? 'bg-blue-600 text-white'
-                            : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                        ? 'bg-blue-600 text-white'
+                        : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
                         }`}
                 >
                     Monthly
@@ -201,8 +201,8 @@ export default function Billing() {
                 <button
                     onClick={() => setBillingInterval('yearly')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'yearly'
-                            ? 'bg-blue-600 text-white'
-                            : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                        ? 'bg-blue-600 text-white'
+                        : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
                         }`}
                 >
                     Yearly
@@ -270,8 +270,8 @@ export default function Billing() {
                                 onClick={() => handleUpgrade(plan)}
                                 disabled={isCurrent || processingTier === plan.tier}
                                 className={`w-full py-2.5 rounded-lg text-sm font-semibold transition ${isCurrent
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
                                     }`}
                             >
                                 {processingTier === plan.tier

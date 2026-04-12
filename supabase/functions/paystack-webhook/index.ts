@@ -8,19 +8,19 @@ const corsHeaders = {
 
 const PLAN_CODES: Record<string, { tier: string; interval: string }> = {
   // ── Retail Plans ──
-  PLN_vgfmc26jpqa56dj: { tier: 'starter', interval: 'monthly' },
-  PLN_qo34f4txuqa2iny: { tier: 'starter', interval: 'yearly' },
-  PLN_oh48az761gii1ac: { tier: 'growth', interval: 'monthly' },
-  PLN_i1jl355wen3da47: { tier: 'growth', interval: 'yearly' },
-  PLN_rzmdyt42wkb1bxp: { tier: 'business', interval: 'monthly' },
-  PLN_wy53l0wv0jewfyu: { tier: 'business', interval: 'yearly' },
+  PLN_grze6zv0gkw5euw: { tier: 'starter', interval: 'monthly' },
+  PLN_jz65z74pi7nvbxy: { tier: 'starter', interval: 'yearly' },
+  PLN_2bym17e1gqq9a68: { tier: 'growth', interval: 'monthly' },
+  PLN_jvas4v10w9qx92w: { tier: 'growth', interval: 'yearly' },
+  PLN_a2mnjvi7wom1oeu: { tier: 'business', interval: 'monthly' },
+  PLN_j8xvl1sr93ufrmr: { tier: 'business', interval: 'yearly' },
   // ── Online Vendor Plans ──
-  PLN_ld2wkx75vf2owop: { tier: 'solo', interval: 'monthly' },
-  PLN_liieyblqil0xgma: { tier: 'solo', interval: 'yearly' },
-  PLN_7j4dvngdd7q1xcd: { tier: 'hustle', interval: 'monthly' },
-  PLN_1a7tboh8temcq9t: { tier: 'hustle', interval: 'yearly' },
-  PLN_oxtaphfdtb7tvth: { tier: 'scale', interval: 'monthly' },
-  PLN_n3mxm6r1aaydvnd: { tier: 'scale', interval: 'yearly' },
+  PLN_1dmcxfs006gtl6m: { tier: 'solo', interval: 'monthly' },
+  PLN_vp08jxmaekii6m8: { tier: 'solo', interval: 'yearly' },
+  PLN_jgfdsznt7qu4bwm: { tier: 'hustle', interval: 'monthly' },
+  PLN_vz2eh4f9jvwr0dv: { tier: 'hustle', interval: 'yearly' },
+  PLN_zg2ndbq2x36flcx: { tier: 'scale', interval: 'monthly' },
+  PLN_izrkgoyv88a1pss: { tier: 'scale', interval: 'yearly' },
 }
 
 Deno.serve(async (req) => {
