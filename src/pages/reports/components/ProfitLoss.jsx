@@ -8,15 +8,22 @@ import { useBranchFilter } from '../../../hooks/useBranchFilter'
 export default function ProfitLoss({ dateRange }) {
     const { profile } = useAuth()
     const [sales, setSales] = useState([])
+    const [vendorOrders, setVendorOrders] = useState([])
     const [saleItems, setSaleItems] = useState([])
+    const [orderItems, setOrderItems] = useState([])
     const [expenses, setExpenses] = useState([])
     const [loading, setLoading] = useState(true)
     const { applyFilter } = useBranchFilter()
+
+    const mode = profile?.businesses?.mode
+    const isCombo = mode === 'combo'
 
     useEffect(() => { fetchData() }, [dateRange])
 
     async function fetchData() {
         setLoading(true)
+
+        // Fetch POS sales
         let salesQuery = supabase
             .from('sales')
             .select('id, total, created_at')
@@ -26,6 +33,7 @@ export default function ProfitLoss({ dateRange }) {
             .lte('created_at', dateRange.to + 'T23:59:59')
         salesQuery = applyFilter(salesQuery)
 
+        // Fetch expenses
         let expensesQuery = supabase
             .from('expenses')
             .select('amount, expense_date')
@@ -40,6 +48,7 @@ export default function ProfitLoss({ dateRange }) {
         setSales(fetchedSales)
         setExpenses(expensesRes.data ?? [])
 
+        // Fetch POS sale items
         if (fetchedSales.length > 0) {
             const saleIds = fetchedSales.map(s => s.id)
             const { data: items } = await supabase
@@ -51,54 +60,146 @@ export default function ProfitLoss({ dateRange }) {
             setSaleItems([])
         }
 
+        // For combo users, also fetch vendor orders and their items
+        if (isCombo) {
+            const { data: orders } = await supabase
+                .from('vendor_orders')
+                .select('id, total_amount, created_at')
+                .eq('business_id', profile.business_id)
+                .eq('status', 'completed')
+                .gte('created_at', dateRange.from)
+                .lte('created_at', dateRange.to + 'T23:59:59')
+
+            setVendorOrders(orders ?? [])
+
+            if (orders && orders.length > 0) {
+                const orderIds = orders.map(o => o.id)
+                const { data: items } = await supabase
+                    .from('order_items')
+                    .select('order_id, quantity, unit_price, variant_id')
+                    .in('order_id', orderIds)
+
+                // Get variant buying prices for cost calculation
+                const variantIds = [...new Set(items?.map(i => i.variant_id).filter(v => v))]
+                let buyingPriceMap = {}
+                if (variantIds.length > 0) {
+                    const { data: variants } = await supabase
+                        .from('product_variants')
+                        .select('id, buying_price')
+                        .in('id', variantIds)
+
+                    for (const variant of (variants ?? [])) {
+                        buyingPriceMap[variant.id] = Number(variant.buying_price) || 0
+                    }
+                }
+
+                // Enrich order items with buying price
+                const enrichedItems = (items ?? []).map(item => ({
+                    ...item,
+                    buying_price: buyingPriceMap[item.variant_id] || 0,
+                    subtotal: Number(item.unit_price) * Number(item.quantity)
+                }))
+
+                setOrderItems(enrichedItems)
+            } else {
+                setOrderItems([])
+            }
+        }
+
         setLoading(false)
     }
 
-    // Core calculations
-    const totalRevenue = sales.reduce((sum, s) => sum + Number(s.total), 0)
-    const totalCOGS = saleItems.reduce((sum, i) => sum + (Number(i.buying_price) * Number(i.quantity)), 0)
+    // Calculate totals from POS sales
+    const posRevenue = sales.reduce((sum, s) => sum + Number(s.total), 0)
+    const posCOGS = saleItems.reduce((sum, i) => sum + (Number(i.buying_price) * Number(i.quantity)), 0)
+
+    // Calculate totals from vendor orders (for combo users)
+    const vendorRevenue = vendorOrders.reduce((sum, o) => sum + Number(o.total_amount), 0)
+    const vendorCOGS = orderItems.reduce((sum, i) => sum + (Number(i.buying_price) * Number(i.quantity)), 0)
+
+    // Combined totals
+    const totalRevenue = posRevenue + vendorRevenue
+    const totalCOGS = posCOGS + vendorCOGS
     const grossProfit = totalRevenue - totalCOGS
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0)
     const netProfit = grossProfit - totalExpenses
     const grossMargin = totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(1) : 0
     const netMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : 0
 
-    // Build sale lookup for day grouping
-    const saleMap = sales.reduce((acc, s) => { acc[s.id] = s; return acc }, {})
+    // Create maps for day grouping
+    const posSaleMap = sales.reduce((acc, s) => { acc[s.id] = s; return acc }, {})
+    const vendorOrderMap = vendorOrders.reduce((acc, o) => { acc[o.id] = o; return acc }, {})
 
-    // Group by day
+    // Group by day - collect all dates from all sources
     const allDays = new Set([
         ...sales.map(s => new Date(s.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })),
+        ...vendorOrders.map(o => new Date(o.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })),
         ...expenses.map(e => new Date(e.expense_date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })),
     ])
 
-    const revenueByDay = sales.reduce((acc, s) => {
+    // Revenue by day (POS)
+    const posRevenueByDay = sales.reduce((acc, s) => {
         const d = new Date(s.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
         acc[d] = (acc[d] ?? 0) + Number(s.total)
         return acc
     }, {})
 
-    const cogsByDay = saleItems.reduce((acc, item) => {
-        const sale = saleMap[item.sale_id]
+    // Vendor revenue by day
+    const vendorRevenueByDay = vendorOrders.reduce((acc, o) => {
+        const d = new Date(o.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
+        acc[d] = (acc[d] ?? 0) + Number(o.total_amount)
+        return acc
+    }, {})
+
+    // COGS by day (POS)
+    const posCogsByDay = saleItems.reduce((acc, item) => {
+        const sale = posSaleMap[item.sale_id]
         if (!sale) return acc
         const d = new Date(sale.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
         acc[d] = (acc[d] ?? 0) + (Number(item.buying_price) * Number(item.quantity))
         return acc
     }, {})
 
+    // COGS by day (Vendor)
+    const vendorCogsByDay = orderItems.reduce((acc, item) => {
+        const order = vendorOrderMap[item.order_id]
+        if (!order) return acc
+        const d = new Date(order.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
+        acc[d] = (acc[d] ?? 0) + (Number(item.buying_price) * Number(item.quantity))
+        return acc
+    }, {})
+
+    // Expenses by day
     const expensesByDay = expenses.reduce((acc, e) => {
         const d = new Date(e.expense_date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
         acc[d] = (acc[d] ?? 0) + Number(e.amount)
         return acc
     }, {})
 
+    // Combine all data
     const chartData = [...allDays].map(day => {
-        const revenue = revenueByDay[day] ?? 0
-        const cogs = cogsByDay[day] ?? 0
+        const posRev = posRevenueByDay[day] ?? 0
+        const vendorRev = vendorRevenueByDay[day] ?? 0
+        const revenue = posRev + vendorRev
+
+        const posCogs = posCogsByDay[day] ?? 0
+        const vendorCogs = vendorCogsByDay[day] ?? 0
+        const cogs = posCogs + vendorCogs
+
         const exp = expensesByDay[day] ?? 0
         const gross = revenue - cogs
         const net = gross - exp
-        return { date: day, revenue, cogs, grossProfit: gross, expenses: exp, netProfit: net }
+
+        return {
+            date: day,
+            revenue,
+            cogs,
+            grossProfit: gross,
+            expenses: exp,
+            netProfit: net,
+            posRevenue: posRev,
+            vendorRevenue: vendorRev
+        }
     })
 
     if (loading) return <div className="text-sm text-gray-400 py-8 text-center">Loading...</div>
@@ -150,6 +251,7 @@ export default function ProfitLoss({ dateRange }) {
                     <strong>COGS</strong> = buying price × qty sold &nbsp;|&nbsp;
                     <strong>Gross Profit</strong> = Revenue − COGS &nbsp;|&nbsp;
                     <strong>Net Profit</strong> = Gross Profit − Expenses
+                    {isCombo && <span className="block mt-1 text-blue-500">Includes both POS sales and online orders</span>}
                 </p>
             </div>
 
@@ -196,6 +298,7 @@ export default function ProfitLoss({ dateRange }) {
                             'Gross Profit': d.grossProfit,
                             Expenses: d.expenses,
                             'Net Profit': d.netProfit,
+                            ...(isCombo ? { 'POS Revenue': d.posRevenue, 'Online Revenue': d.vendorRevenue } : {})
                         })), 'profit-loss-report')}
                         className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
                     >
@@ -215,6 +318,7 @@ export default function ProfitLoss({ dateRange }) {
                                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Gross Profit</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Expenses</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Net Profit</th>
+                                    {isCombo && <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">POS / Online</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -228,6 +332,14 @@ export default function ProfitLoss({ dateRange }) {
                                         <td className={`px-4 py-3 font-bold ${row.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                             {row.netProfit >= 0 ? '+' : ''}₦{row.netProfit.toLocaleString()}
                                         </td>
+                                        {isCombo && (
+                                            <td className="px-4 py-3">
+                                                <div className="flex flex-col gap-0.5 text-xs">
+                                                    {row.posRevenue > 0 && <span className="text-green-600">POS: ₦{row.posRevenue.toLocaleString()}</span>}
+                                                    {row.vendorRevenue > 0 && <span className="text-purple-600">Online: ₦{row.vendorRevenue.toLocaleString()}</span>}
+                                                </div>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import PageWrapper from '../../components/layout/PageWrapper'
+import { getEffectiveTier } from '../../lib/vendorPlanLimits'
 
 const BASE_URL = window.location.origin
 
@@ -285,7 +286,9 @@ export default function Storefront() {
     })
 
     const tier = profile?.businesses?.subscription_tier ?? 'solo'
-    const isScale = tier === 'scale'
+    const subStatus = profile?.subscription?.status ?? 'inactive'
+    const effectiveTier = getEffectiveTier(tier, subStatus)
+    const isScale = effectiveTier === 'scale'
 
     useEffect(() => {
         if (!profile?.business_id) return

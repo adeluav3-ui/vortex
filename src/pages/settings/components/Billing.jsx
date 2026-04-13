@@ -270,6 +270,13 @@ export default function Billing() {
         handler.openIframe()
     }
 
+    // Right after fetching profile
+    console.log('Billing Debug:', {
+        mode: profile?.businesses?.mode,
+        subscriptionTier: profile?.subscription?.tier,
+        subscriptionStatus: profile?.subscription?.status
+    })
+
     const periodEnd = subscription?.current_period_end
         ? new Date(subscription.current_period_end).toLocaleDateString('en-NG', {
             day: 'numeric', month: 'long', year: 'numeric'

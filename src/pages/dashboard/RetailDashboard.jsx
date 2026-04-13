@@ -13,8 +13,12 @@ export default function RetailDashboard() {
         expensesToday: 0,
     })
     const [recentSales, setRecentSales] = useState([])
+    const [recentOrders, setRecentOrders] = useState([])
     const [loading, setLoading] = useState(true)
     const { applyFilter } = useBranchFilter()
+
+    const mode = profile?.businesses?.mode
+    const isCombo = mode === 'combo'
 
     useEffect(() => {
         if (!profile?.business_id) return
@@ -34,6 +38,12 @@ export default function RetailDashboard() {
                 table: 'expenses',
                 filter: `business_id=eq.${profile.business_id}`,
             }, () => fetchStats())
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'vendor_orders',
+                filter: `business_id=eq.${profile.business_id}`,
+            }, () => fetchStats())
             .subscribe()
 
         return () => supabase.removeChannel(channel)
@@ -44,6 +54,7 @@ export default function RetailDashboard() {
         const todayDate = now.toISOString().split('T')[0]
         const todayStart = new Date(`${todayDate}T00:00:00.000Z`)
 
+        // Fetch POS sales
         let salesQuery = supabase
             .from('sales')
             .select('total')
@@ -52,6 +63,7 @@ export default function RetailDashboard() {
             .gte('created_at', todayStart.toISOString())
         salesQuery = applyFilter(salesQuery)
 
+        // Fetch recent POS sales
         let recentQuery = supabase
             .from('sales')
             .select('*, customers(full_name)')
@@ -60,6 +72,7 @@ export default function RetailDashboard() {
             .limit(5)
         recentQuery = applyFilter(recentQuery)
 
+        // Fetch expenses
         let expensesQuery = supabase
             .from('expenses')
             .select('amount')
@@ -83,8 +96,45 @@ export default function RetailDashboard() {
             expensesQuery,
         ])
 
-        const todaySales = salesRes.data?.reduce((sum, s) => sum + Number(s.total), 0) ?? 0
+        let todaySales = salesRes.data?.reduce((sum, s) => sum + Number(s.total), 0) ?? 0
+        let recentSalesData = recentRes.data ?? []
+        let recentOrdersData = []
+
+        // For combo users, also fetch vendor orders
+        if (isCombo) {
+            const { data: ordersData } = await supabase
+                .from('vendor_orders')
+                .select('order_number, total_amount, payment_method, status, created_at, customer_name')
+                .eq('business_id', profile.business_id)
+                .eq('status', 'completed')
+                .gte('created_at', todayStart.toISOString())
+                .order('created_at', { ascending: false })
+                .limit(5)
+
+            // Add vendor order revenue to today's sales
+            const todayOrdersTotal = ordersData?.reduce((sum, o) => sum + Number(o.total_amount), 0) ?? 0
+            todaySales += todayOrdersTotal
+
+            recentOrdersData = ordersData?.map(order => ({
+                id: order.id,
+                sale_number: order.order_number,
+                payment_method: order.payment_method || 'online',
+                total: order.total_amount,
+                created_at: order.created_at,
+                customers: { full_name: order.customer_name },
+                source: 'online'
+            })) ?? []
+        }
+
         const expensesToday = expensesRes.data?.reduce((sum, e) => sum + Number(e.amount), 0) ?? 0
+
+        // Merge recent sales and recent orders for combo users
+        let allRecentTransactions = [...recentSalesData]
+        if (isCombo) {
+            allRecentTransactions = [...recentSalesData, ...recentOrdersData]
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                .slice(0, 5)
+        }
 
         setStats({
             todaySales,
@@ -92,7 +142,8 @@ export default function RetailDashboard() {
             totalCustomers: customerRes.count ?? 0,
             expensesToday,
         })
-        setRecentSales(recentRes.data ?? [])
+        setRecentSales(allRecentTransactions)
+        setRecentOrders(recentOrdersData)
         setLoading(false)
     }
 
@@ -101,6 +152,7 @@ export default function RetailDashboard() {
         card: 'bg-blue-50 text-blue-600',
         transfer: 'bg-purple-50 text-purple-600',
         credit: 'bg-orange-50 text-orange-600',
+        online: 'bg-indigo-50 text-indigo-600',
     }
 
     return (
@@ -126,12 +178,12 @@ export default function RetailDashboard() {
 
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
                 <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-900">Recent Sales</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">Recent Transactions</h3>
                     <span className="text-xs text-green-500 font-medium">● Live</span>
                 </div>
                 {recentSales.length === 0 ? (
                     <div className="px-5 py-8 text-center text-sm text-gray-400">
-                        No sales yet — head to the POS to record your first sale
+                        No transactions yet — record your first sale or order
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-50">
@@ -139,7 +191,7 @@ export default function RetailDashboard() {
                             <div key={sale.id} className="flex items-center justify-between px-5 py-3">
                                 <div className="flex items-center gap-3">
                                     <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${METHOD_COLORS[sale.payment_method] ?? 'bg-gray-50 text-gray-600'}`}>
-                                        {sale.payment_method}
+                                        {sale.payment_method === 'online' ? 'Online' : sale.payment_method}
                                     </span>
                                     <div>
                                         <p className="text-sm font-medium text-gray-900">{sale.sale_number}</p>
@@ -147,7 +199,8 @@ export default function RetailDashboard() {
                                             {new Date(sale.created_at).toLocaleString('en-NG', {
                                                 day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
                                             })}
-                                            {sale.customers ? ` — ${sale.customers.full_name}` : ''}
+                                            {sale.customers?.full_name ? ` — ${sale.customers.full_name}` : ''}
+                                            {sale.source === 'online' ? ' (Online Order)' : ''}
                                         </p>
                                     </div>
                                 </div>
