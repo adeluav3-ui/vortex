@@ -85,11 +85,13 @@ export function getEffectiveTier(tier, status) {
     // Trialing = full Scale access always
     if (status === 'trialing') return 'scale'
 
-    // Known tiers pass through (including combo plans)
+    // Map combo tiers to their equivalent vendor tiers for feature access
+    if (tier === 'combo_basic') return 'solo'
+    if (tier === 'combo_standard') return 'hustle'
+    if (tier === 'combo_premium') return 'scale'
+
+    // Known tiers pass through
     if (tier === 'solo' || tier === 'hustle' || tier === 'scale') return tier
-    if (tier === 'combo_basic') return 'combo_basic'
-    if (tier === 'combo_standard') return 'combo_standard'
-    if (tier === 'combo_premium') return 'combo_premium'
 
     // Fallback
     return 'solo'
