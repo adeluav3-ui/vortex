@@ -128,7 +128,7 @@ export default function LandingPage() {
     const currentPlans = getCurrentPlans()
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
+        <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-blue-50">
             {/* Navigation Bar */}
             <nav className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -238,7 +238,7 @@ export default function LandingPage() {
             </section>
 
             {/* Three Modes Section */}
-            <section className="py-20 bg-gradient-to-br from-blue-50 to-white">
+            <section className="py-20 bg-linear-to-br from-blue-50 to-white">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -293,7 +293,7 @@ export default function LandingPage() {
                         </div>
 
                         {/* Combo Card - NEW */}
-                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-200 shadow-md hover:shadow-lg transition">
+                        <div className="bg-linear-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-200 shadow-md hover:shadow-lg transition">
                             <div className="text-5xl mb-4">🏪📦</div>
                             <h3 className="text-2xl font-bold text-gray-900 mb-2">Both (Store + Online)</h3>
                             <p className="text-gray-600 mb-4">For businesses with a physical store AND an online presence</p>
@@ -441,9 +441,6 @@ export default function LandingPage() {
                     <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
                         Ready to Transform Your Business?
                     </h2>
-                    <p className="text-lg text-blue-100 mb-8">
-                        Join thousands of businesses using Vortex to manage their operations
-                    </p>
                     <button
                         onClick={() => navigate('/signup')}
                         className="px-8 py-3 text-base font-semibold text-blue-600 bg-white rounded-xl hover:shadow-lg transition transform hover:scale-105"
