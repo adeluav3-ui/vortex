@@ -43,6 +43,10 @@ export default function AcceptInvite() {
         setLoading(true)
 
         try {
+            // Get the current user
+            const { data: { user }, error: userError } = await supabase.auth.getUser()
+            if (userError) throw userError
+
             // Update password
             const { error: pwError } = await supabase.auth.updateUser({ password })
             if (pwError) throw pwError
@@ -51,11 +55,12 @@ export default function AcceptInvite() {
             const { error: profileError } = await supabase
                 .from('profiles')
                 .upsert({
-                    id: (await supabase.auth.getUser()).data.user.id,
+                    id: user.id,
                     full_name: userData.full_name,
                     business_id: userData.business_id,
                     branch_id: userData.branch_id,
                     role: userData.role,
+                    is_active: true,
                 })
             if (profileError) throw profileError
 
@@ -63,14 +68,20 @@ export default function AcceptInvite() {
             if (userData.staff_id) {
                 await supabase
                     .from('staff')
-                    .update({ invite_accepted: true })
+                    .update({
+                        invite_accepted: true,
+                        user_id: user.id
+                    })
                     .eq('id', userData.staff_id)
             }
 
-            navigate('/dashboard')
+            // Sign out to clear the invite session
+            await supabase.auth.signOut()
+
+            // Redirect to login page with success message
+            navigate('/login?invite=success')
         } catch (err) {
             setError(err.message)
-        } finally {
             setLoading(false)
         }
     }
@@ -104,6 +115,12 @@ export default function AcceptInvite() {
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
             <div className="bg-white rounded-2xl shadow p-8 w-full max-w-md">
+                <div className="flex flex-col items-center justify-center mb-6">
+                    <img src="/logo.png" alt="Vortex" className="h-16 w-16 object-contain mb-3" />
+                    <span className="text-xl font-bold bg-linear-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                        Vortex
+                    </span>
+                </div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-1">Welcome to Vortex</h1>
                 <p className="text-sm text-gray-500 mb-6">
                     Hi <strong>{userData?.full_name}</strong>, set a password to activate your account.
@@ -122,13 +139,18 @@ export default function AcceptInvite() {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Set Password</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Min 6 characters"
-                        />
+                        <div className="relative">
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Min 6 characters"
+                            />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                            After activation, you'll be redirected to login with your new password.
+                        </p>
                     </div>
 
                     <button

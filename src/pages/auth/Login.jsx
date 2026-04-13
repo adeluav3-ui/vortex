@@ -1,12 +1,20 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
 export default function Login() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const [form, setForm] = useState({ email: '', password: '' })
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [successMessage, setSuccessMessage] = useState('')
+
+    useEffect(() => {
+        if (searchParams.get('invite') === 'success') {
+            setSuccessMessage('Account activated! Please log in with your new password.')
+        }
+    }, [searchParams])
 
     function handleChange(e) {
         setForm({ ...form, [e.target.name]: e.target.value })
@@ -53,6 +61,12 @@ export default function Login() {
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-1">Welcome back</h1>
                 <p className="text-sm text-gray-500 mb-6">Log in to your Vortex account</p>
+
+                {successMessage && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4">
+                        <p className="text-sm text-green-600">{successMessage}</p>
+                    </div>
+                )}
 
                 {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
 
