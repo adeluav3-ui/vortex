@@ -114,7 +114,6 @@ export default function StaffList({ refresh, onEdit, onView }) {
                                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Role</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Branch</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Salary</th>
-                                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invite</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
                                 </tr>
@@ -135,6 +134,7 @@ export default function StaffList({ refresh, onEdit, onView }) {
                                                         {member.full_name}
                                                     </button>
                                                     {member.phone && <p className="text-xs text-gray-400">{member.phone}</p>}
+                                                    {member.email && <p className="text-xs text-gray-400">{member.email}</p>}
                                                 </div>
                                             </div>
                                         </td>
@@ -148,15 +148,6 @@ export default function StaffList({ refresh, onEdit, onView }) {
                                             {Number(member.salary) > 0 ? `₦${Number(member.salary).toLocaleString()}` : '—'}
                                             {member.salary_frequency && Number(member.salary) > 0 && (
                                                 <span className="text-xs text-gray-400 ml-1">/{member.salary_frequency}</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {member.invite_accepted ? (
-                                                <span className="text-xs bg-green-50 text-green-600 px-2 py-1 rounded-full">Accepted</span>
-                                            ) : member.invite_sent ? (
-                                                <span className="text-xs bg-yellow-50 text-yellow-600 px-2 py-1 rounded-full">Pending</span>
-                                            ) : (
-                                                <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full">Not sent</span>
                                             )}
                                         </td>
                                         <td className="px-4 py-3">

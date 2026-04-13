@@ -9,14 +9,15 @@ export default function StaffModal({ staff, onClose, onSaved }) {
     const { profile, user } = useAuth()
     const [branches, setBranches] = useState([])
     const [loading, setLoading] = useState(false)
-    const [inviting, setInviting] = useState(false)
+    const [creatingUser, setCreatingUser] = useState(false)
     const [error, setError] = useState('')
-    const [inviteStatus, setInviteStatus] = useState(null) // 'sent', 'failed', null
+    const [success, setSuccess] = useState('')
 
     const [form, setForm] = useState({
         full_name: staff?.full_name ?? '',
         phone: staff?.phone ?? '',
         email: staff?.email ?? '',
+        password: '',
         role: staff?.role ?? 'staff',
         branch_id: staff?.branch_id ?? '',
         salary: staff?.salary ?? '',
@@ -35,63 +36,17 @@ export default function StaffModal({ staff, onClose, onSaved }) {
         setForm({ ...form, [e.target.name]: e.target.value })
     }
 
-    async function sendInvite(staffId, email, fullName, role, branchId) {
-        setInviting(true)
-        setInviteStatus(null)
-
-        try {
-            // Get fresh session
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-            if (sessionError || !session) {
-                console.error('Session error:', sessionError)
-                throw new Error('Unable to authenticate. Please refresh and try again.')
-            }
-
-            const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-staff`
-            console.log('Calling edge function at:', functionUrl)
-
-            const payload = {
-                email: email.trim(),
-                full_name: fullName.trim(),
-                role: role,
-                business_id: profile.business_id,
-                branch_id: branchId || null,
-                staff_id: staffId,
-            }
-            console.log('Invite payload:', payload)
-
-            const response = await fetch(functionUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify(payload),
-            })
-
-            const result = await response.json()
-            console.log('Invite response:', result)
-
-            if (!response.ok) {
-                throw new Error(result.error || `HTTP ${response.status}: Failed to send invite`)
-            }
-
-            setInviteStatus('sent')
-            return true
-        } catch (err) {
-            console.error('Invite error:', err)
-            setInviteStatus('failed')
-            setError(`Invite failed: ${err.message}. The staff member was added but they won't receive an email. You can resend invite later.`)
-            return false
-        } finally {
-            setInviting(false)
-        }
-    }
-
     async function handleSave() {
         setError('')
+        setSuccess('')
+
         if (!form.full_name.trim()) return setError('Full name is required')
+        if (!form.email.trim()) return setError('Email is required')
+
+        // For new staff, password is required
+        if (!staff && !form.password) return setError('Password is required for new staff')
+        if (!staff && form.password.length < 6) return setError('Password must be at least 6 characters')
+
         setLoading(true)
 
         try {
@@ -102,7 +57,7 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                     .update({
                         full_name: form.full_name.trim(),
                         phone: form.phone.trim() || null,
-                        email: form.email.trim() || null,
+                        email: form.email.trim(),
                         role: form.role,
                         branch_id: form.branch_id || null,
                         salary: Number(form.salary) || 0,
@@ -111,44 +66,75 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                     .eq('id', staff.id)
                 if (error) throw error
 
-                onSaved()
-            } else {
-                // Create new staff record first
-                const { data: newStaff, error: staffErr } = await supabase
-                    .from('staff')
-                    .insert({
-                        business_id: profile.business_id,
-                        branch_id: form.branch_id || null,
-                        full_name: form.full_name.trim(),
-                        phone: form.phone.trim() || null,
-                        email: form.email.trim() || null,
-                        role: form.role,
-                        salary: Number(form.salary) || 0,
-                        salary_frequency: form.salary_frequency,
-                        invite_sent: false, // Start with false
-                    })
-                    .select()
-                    .single()
-                if (staffErr) throw staffErr
+                // If password is provided, update it in auth
+                if (form.password) {
+                    setCreatingUser(true)
 
-                // Send invite if email provided
-                if (form.email.trim()) {
-                    await sendInvite(newStaff.id, form.email, form.full_name, form.role, form.branch_id)
+                    // Update user password via admin API (requires edge function)
+                    const { data: { session } } = await supabase.auth.getSession()
 
-                    // Update the staff record to mark invite as sent
-                    if (inviteStatus === 'sent') {
-                        await supabase
-                            .from('staff')
-                            .update({ invite_sent: true })
-                            .eq('id', newStaff.id)
-                    }
+                    const response = await fetch(
+                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-user-password`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${session.access_token}`,
+                            },
+                            body: JSON.stringify({
+                                email: form.email.trim(),
+                                password: form.password,
+                            }),
+                        }
+                    )
+
+                    const result = await response.json()
+                    if (!response.ok) throw new Error(result.error || 'Failed to update password')
+                    setCreatingUser(false)
                 }
 
-                onSaved()
+                setSuccess('Staff updated successfully!')
+                setTimeout(() => onSaved(), 1500)
+            } else {
+                // Create new staff with auth user
+                setCreatingUser(true)
+
+                // Call edge function to create user with password
+                const { data: { session } } = await supabase.auth.getSession()
+
+                const response = await fetch(
+                    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-staff-user`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`,
+                        },
+                        body: JSON.stringify({
+                            email: form.email.trim(),
+                            password: form.password,
+                            full_name: form.full_name.trim(),
+                            role: form.role,
+                            business_id: profile.business_id,
+                            branch_id: form.branch_id || null,
+                            phone: form.phone.trim() || null,
+                            salary: Number(form.salary) || 0,
+                            salary_frequency: form.salary_frequency,
+                        }),
+                    }
+                )
+
+                const result = await response.json()
+                if (!response.ok) throw new Error(result.error || 'Failed to create staff account')
+
+                setCreatingUser(false)
+                setSuccess(`Staff account created! ${form.full_name} can now log in with the password you set.`)
+                setTimeout(() => onSaved(), 2000)
             }
         } catch (err) {
             setError(err.message)
             setLoading(false)
+            setCreatingUser(false)
         } finally {
             setLoading(false)
         }
@@ -171,9 +157,9 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                         </div>
                     )}
 
-                    {inviteStatus === 'sent' && (
+                    {success && (
                         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-                            <p className="text-sm text-green-600">✓ Invite sent successfully to {form.email}</p>
+                            <p className="text-sm text-green-600">{success}</p>
                         </div>
                     )}
 
@@ -186,6 +172,38 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="e.g. Chidi Okeke"
                         />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                        <input
+                            name="email"
+                            type="email"
+                            value={form.email}
+                            onChange={handleChange}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="chidi@example.com"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Password {!staff && <span className="text-red-500">*</span>}
+                            {staff && <span className="text-gray-400 text-xs ml-2">(leave blank to keep current)</span>}
+                        </label>
+                        <input
+                            name="password"
+                            type="password"
+                            value={form.password}
+                            onChange={handleChange}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Min 6 characters"
+                        />
+                        {!staff && (
+                            <p className="text-xs text-gray-400 mt-1">
+                                This password will be used by the staff to log in.
+                            </p>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -212,20 +230,6 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                                 ))}
                             </select>
                         </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Email {!staff && <span className="text-gray-400 font-normal">(invite will be sent)</span>}
-                        </label>
-                        <input
-                            name="email"
-                            type="email"
-                            value={form.email}
-                            onChange={handleChange}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="chidi@example.com"
-                        />
                     </div>
 
                     <div>
@@ -270,9 +274,9 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                         </div>
                     </div>
 
-                    {!staff && form.email && (
+                    {!staff && (
                         <div className="bg-blue-50 rounded-xl px-4 py-3 text-sm text-blue-700">
-                            📧 An invite email will be sent to <strong>{form.email}</strong> so they can set up their login.
+                            🔐 Staff will log in using the email and password you set here.
                         </div>
                     )}
                 </div>
@@ -286,10 +290,10 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={loading || inviting}
+                        disabled={loading || creatingUser}
                         className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
                     >
-                        {inviting ? 'Sending invite...' : loading ? 'Saving...' : staff ? 'Save Changes' : 'Add Staff'}
+                        {creatingUser ? 'Creating account...' : loading ? 'Saving...' : staff ? 'Save Changes' : 'Create Staff'}
                     </button>
                 </div>
             </div>
