@@ -190,13 +190,6 @@ export default function Billing() {
 
     const mode = profile?.businesses?.mode
     const currentTier = subscription?.tier ?? 'starter'
-
-    // In Billing.jsx, right after the component starts
-    console.log('=== BILLING DEBUG ===')
-    console.log('Profile:', profile)
-    console.log('Business mode:', profile?.businesses?.mode)
-    console.log('Subscription:', profile?.subscription)
-
     // Determine which plans to show based on business mode
     let displayPlans = RETAIL_PLANS
     if (mode === 'online_vendor') {
@@ -204,8 +197,6 @@ export default function Billing() {
     } else if (mode === 'combo') {
         displayPlans = COMBO_PLANS
     }
-
-    console.log('Display Plans:', displayPlans.map(p => p.name))
 
     useEffect(() => {
         fetchSubscription()
