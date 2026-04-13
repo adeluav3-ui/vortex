@@ -18,12 +18,15 @@ export default function Signup() {
         setError('')
         setLoading(true)
 
-        // Step 1: Create auth user
+        // Create auth user - profile will be auto-created by trigger
         const { data, error: signUpError } = await supabase.auth.signUp({
             email: form.email,
             password: form.password,
             options: {
-                data: { full_name: form.full_name }
+                data: {
+                    full_name: form.full_name,
+                    role: 'owner'
+                }
             }
         })
 
@@ -33,21 +36,7 @@ export default function Signup() {
             return
         }
 
-        // Step 2: Create profile manually
-        const { error: profileError } = await supabase
-            .from('profiles')
-            .insert({
-                id: data.user.id,
-                full_name: form.full_name,
-                role: 'owner'
-            })
-
-        if (profileError) {
-            setError(profileError.message)
-            setLoading(false)
-            return
-        }
-
+        // Redirect to onboarding - profile is created automatically by the trigger
         navigate('/onboarding')
     }
 
