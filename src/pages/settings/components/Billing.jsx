@@ -191,6 +191,14 @@ export default function Billing() {
     const mode = profile?.businesses?.mode
     const currentTier = subscription?.tier ?? 'starter'
 
+    console.log('Billing Debug:', {
+        mode: mode,
+        subscriptionTier: profile?.subscription?.tier,
+        subscriptionStatus: profile?.subscription?.status,
+        businessMode: profile?.businesses?.mode,
+        businessName: profile?.businesses?.name
+    })
+
     // Determine which plans to show based on business mode
     let displayPlans = RETAIL_PLANS
     if (mode === 'online_vendor') {
@@ -198,6 +206,8 @@ export default function Billing() {
     } else if (mode === 'combo') {
         displayPlans = COMBO_PLANS
     }
+
+    console.log('Display Plans:', displayPlans.map(p => p.name))
 
     useEffect(() => {
         fetchSubscription()
@@ -269,13 +279,6 @@ export default function Billing() {
 
         handler.openIframe()
     }
-
-    // Right after fetching profile
-    console.log('Billing Debug:', {
-        mode: profile?.businesses?.mode,
-        subscriptionTier: profile?.subscription?.tier,
-        subscriptionStatus: profile?.subscription?.status
-    })
 
     const periodEnd = subscription?.current_period_end
         ? new Date(subscription.current_period_end).toLocaleDateString('en-NG', {
