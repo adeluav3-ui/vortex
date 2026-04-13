@@ -185,9 +185,9 @@ const COMBO_PLANS = [
     },
 ]
 
-const RETAIL_STEPS = ['Business Info', 'Contact & Address', 'Main Branch', 'Choose Plan', 'Payment']
+const RETAIL_STEPS = ['Business Info', 'Contact & Address', 'Main Branch', 'Choose Plan', 'Start Trial']
 const VENDOR_STEPS = ['Business Info', 'Contact & Address', 'Choose Plan', 'Start Trial']
-const COMBO_STEPS = ['Business Info', 'Contact & Address', 'Main Branch', 'Choose Plan', 'Payment']
+const COMBO_STEPS = ['Business Info', 'Contact & Address', 'Main Branch', 'Choose Plan', 'Start Trial']
 
 export default function Onboarding() {
     const navigate = useNavigate()
@@ -338,7 +338,7 @@ export default function Onboarding() {
                 .update({
                     business_id: business.id,
                     branch_id: branch.id,
-                    dashboard_view: isCombo ? 'retail' : null, // Default view for combo users
+                    dashboard_view: isCombo ? 'retail' : null,
                 })
                 .eq('id', user.id)
             if (profileError) throw profileError
@@ -365,17 +365,28 @@ export default function Onboarding() {
         }
     }
 
-    // Vendor: start 14-day trial immediately, no payment
+    // ── Start trial immediately (14 days for vendor, 7 days for retail/combo) ──
     async function handleStartTrial() {
         setError('')
         setLoading(true)
 
         try {
+            if (!selectedPlan && !isVendor) {
+                setError('Please select a plan.')
+                setLoading(false)
+                return
+            }
+
             const now = new Date()
-            const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+            const trialDays = isVendor ? 14 : 7
+            const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000)
+
+            // For vendors, always use scale plan for trial
+            // For retail/combo, use the selected plan
+            const tier = isVendor ? 'scale' : selectedPlan.tier
 
             await setupBusiness({
-                tier: 'scale',
+                tier: tier,
                 status: 'trialing',
                 isTrial: true,
                 trialStart: now.toISOString(),
@@ -391,83 +402,8 @@ export default function Onboarding() {
         }
     }
 
-    // Retail or Combo: open Paystack, create business ONLY after successful payment
-    async function handlePayment() {
-        setError('')
-
-        if (!paystackReady || !window.PaystackPop) {
-            setError('Payment system is still loading. Please wait a moment and try again.')
-            return
-        }
-
-        setLoading(true)
-
-        if (!selectedPlan) {
-            setError('Please select a plan.')
-            setLoading(false)
-            return
-        }
-
-        const planCode = billingInterval === 'yearly' ? selectedPlan.yearlyCode : selectedPlan.monthlyCode
-        const amount = billingInterval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice
-
-        await new Promise(resolve => setTimeout(resolve, 100))
-        setLoading(false)
-
-        const handler = window.PaystackPop.setup({
-            key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
-            email: user.email,
-            amount: amount * 100,
-            plan: planCode,
-            currency: 'NGN',
-            channels: ['card'],
-            ref: `VTX-${user.id.slice(0, 8)}-${Date.now()}`,
-            metadata: {
-                user_id: user.id,
-                tier: selectedPlan.tier,
-                interval: billingInterval,
-                mode: form.business_mode,
-            },
-            onClose: () => {
-                setError('Payment was cancelled. You can try again when ready.')
-            },
-            callback: function () {
-                async function onSuccess() {
-                    setLoading(true)
-                    try {
-                        const now = new Date()
-                        const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-                        await setupBusiness({
-                            tier: selectedPlan.tier,
-                            status: 'trialing',
-                            isTrial: true,
-                            trialStart: now.toISOString(),
-                            trialEnd: trialEnd.toISOString(),
-                        })
-                        await fetchProfile(user.id)
-                        navigate('/dashboard')
-                    } catch (err) {
-                        setError(
-                            `Payment was successful but setup encountered an error: ${err.message}. ` +
-                            `Please contact support with your email address and we'll sort it out immediately.`
-                        )
-                        setLoading(false)
-                    }
-                }
-                onSuccess()
-            },
-        })
-
-        handler.openIframe()
-    }
-
     function handleFinalStep() {
-        if (isVendor) {
-            handleStartTrial()
-        } else {
-            handlePayment()
-        }
+        handleStartTrial()
     }
 
     const totalSteps = STEPS.length
@@ -668,43 +604,45 @@ export default function Onboarding() {
                                 )
                             })}
                         </div>
-                        {isVendor && (
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                                <span className="text-lg">🎁</span>
-                                <p className="text-xs text-amber-800 leading-relaxed">
-                                    <span className="font-semibold">Not sure yet?</span> Continue — you'll get a free 14-day trial on the <span className="font-semibold">Scale plan</span> with no card required.
-                                </p>
-                            </div>
-                        )}
-                        {(isCombo || !isVendor) && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                                <span className="text-lg">🎁</span>
-                                <p className="text-xs text-blue-800 leading-relaxed">
-                                    <span className="font-semibold">7-day free trial</span> — You'll get full access to your chosen plan for 7 days. No charges until your trial ends.
-                                </p>
-                            </div>
-                        )}
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                            <span className="text-lg">🎁</span>
+                            <p className="text-xs text-blue-800 leading-relaxed">
+                                <span className="font-semibold">{isVendor ? '14-day free trial' : '7-day free trial'}</span> — You'll get full access to your chosen plan. No payment required to start.
+                            </p>
+                        </div>
                     </div>
                 )}
 
-                {/* ── Vendor Trial Step ── */}
-                {isVendor && step === 4 && (
+                {/* ── Start Trial Step ── */}
+                {step === totalSteps && (
                     <div className="space-y-5">
                         <div className="bg-linear-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 text-center space-y-3">
                             <div className="text-4xl">🚀</div>
                             <h2 className="text-lg font-bold text-gray-900">You're almost in!</h2>
                             <p className="text-sm text-gray-600 leading-relaxed">
-                                Your free 14-day trial starts now. You'll get <span className="font-semibold text-blue-700">full Scale plan access</span> — unlimited orders, 5 users, full reports, storefront link, and delivery tracking.
+                                Your free {isVendor ? '14-day' : '7-day'} trial starts now.
+                                {isVendor ? (
+                                    " You'll get full Scale plan access — unlimited orders, 5 users, full reports, storefront link, and delivery tracking."
+                                ) : (
+                                    " You'll get full access to your chosen plan."
+                                )}
                             </p>
                             <div className="bg-white rounded-xl border border-blue-100 px-4 py-3 text-left space-y-2">
                                 <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">What's included in your trial</p>
-                                {VENDOR_PLANS.find(p => p.tier === 'scale')?.features.map(f => (
-                                    <p key={f} className="text-xs text-gray-600 flex items-center gap-2"><span className="text-blue-500">✓</span> {f}</p>
-                                ))}
+                                {selectedPlan ? (
+                                    selectedPlan.features.map(f => (
+                                        <p key={f} className="text-xs text-gray-600 flex items-center gap-2"><span className="text-blue-500">✓</span> {f}</p>
+                                    ))
+                                ) : isVendor ? (
+                                    VENDOR_PLANS.find(p => p.tier === 'scale')?.features.map(f => (
+                                        <p key={f} className="text-xs text-gray-600 flex items-center gap-2"><span className="text-blue-500">✓</span> {f}</p>
+                                    ))
+                                ) : null}
                             </div>
-                            <p className="text-xs text-gray-400">No credit card required. After 14 days, choose a plan to continue.</p>
+                            <p className="text-xs text-gray-400">No credit card required. After {isVendor ? '14' : '7'} days, choose a plan to continue.</p>
                         </div>
-                        {selectedPlan ? (
+
+                        {selectedPlan && !isVendor && (
                             <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3 flex items-center justify-between">
                                 <div>
                                     <p className="text-xs text-gray-500">Your plan after trial</p>
@@ -712,31 +650,13 @@ export default function Onboarding() {
                                 </div>
                                 <button onClick={() => setStep(step - 1)} className="text-xs text-blue-600 hover:underline">Change</button>
                             </div>
-                        ) : (
-                            <p className="text-xs text-center text-gray-400">You didn't select a plan — you can choose one from Settings → Billing when your trial ends.</p>
                         )}
-                    </div>
-                )}
 
-                {/* ── Retail/Combo Payment Summary Step ── */}
-                {!isVendor && step === 5 && selectedPlan && (
-                    <div className="space-y-5">
-                        <div className="bg-blue-50 rounded-xl p-5 space-y-3">
-                            <h3 className="text-sm font-semibold text-gray-900">Order Summary</h3>
-                            <div className="flex justify-between text-sm"><span className="text-gray-600">Plan</span><span className="font-medium text-gray-900 capitalize">{selectedPlan.name}</span></div>
-                            <div className="flex justify-between text-sm"><span className="text-gray-600">Billing</span><span className="font-medium text-gray-900 capitalize">{billingInterval}</span></div>
-                            <div className="flex justify-between text-sm"><span className="text-gray-600">Business</span><span className="font-medium text-gray-900">{form.business_name}</span></div>
-                            <div className="border-t border-blue-100 pt-3 flex justify-between">
-                                <span className="text-sm font-semibold text-gray-900">Total</span>
-                                <span className="text-xl font-bold text-blue-600">₦{(billingInterval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice).toLocaleString()}</span>
-                            </div>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500 space-y-1">
-                            <p>✓ Secure payment powered by Paystack</p>
-                            <p>✓ 7-day free trial — your first payment will be charged after the trial ends</p>
-                            <p>✓ Auto-renews {billingInterval === 'yearly' ? 'annually' : 'monthly'} — cancel anytime</p>
-                            <p>✓ Your account is created immediately</p>
-                        </div>
+                        {!selectedPlan && !isVendor && (
+                            <p className="text-xs text-center text-gray-400">
+                                You didn't select a plan — you can choose one from Settings → Billing when your trial ends.
+                            </p>
+                        )}
                     </div>
                 )}
 
@@ -755,14 +675,9 @@ export default function Onboarding() {
                         </button>
                     ) : (
                         <button type="button" onClick={handleFinalStep}
-                            disabled={loading || (!isVendor && !paystackReady)}
+                            disabled={loading}
                             className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                            {loading
-                                ? 'Setting up...'
-                                : isVendor
-                                    ? 'Start My Free 14-Day Trial →'
-                                    : `Start 7-Day Free Trial →`
-                            }
+                            {loading ? 'Setting up...' : `Start My Free ${isVendor ? '14-Day' : '7-Day'} Trial →`}
                         </button>
                     )}
                 </div>
