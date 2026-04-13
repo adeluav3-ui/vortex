@@ -6,11 +6,12 @@ const ROLES = ['manager', 'staff', 'cashier']
 const FREQUENCIES = ['monthly', 'weekly', 'daily']
 
 export default function StaffModal({ staff, onClose, onSaved }) {
-    const { profile } = useAuth()
+    const { profile, user } = useAuth()
     const [branches, setBranches] = useState([])
     const [loading, setLoading] = useState(false)
     const [inviting, setInviting] = useState(false)
     const [error, setError] = useState('')
+    const [inviteStatus, setInviteStatus] = useState(null) // 'sent', 'failed', null
 
     const [form, setForm] = useState({
         full_name: staff?.full_name ?? '',
@@ -34,6 +35,60 @@ export default function StaffModal({ staff, onClose, onSaved }) {
         setForm({ ...form, [e.target.name]: e.target.value })
     }
 
+    async function sendInvite(staffId, email, fullName, role, branchId) {
+        setInviting(true)
+        setInviteStatus(null)
+
+        try {
+            // Get fresh session
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+            if (sessionError || !session) {
+                console.error('Session error:', sessionError)
+                throw new Error('Unable to authenticate. Please refresh and try again.')
+            }
+
+            const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-staff`
+            console.log('Calling edge function at:', functionUrl)
+
+            const payload = {
+                email: email.trim(),
+                full_name: fullName.trim(),
+                role: role,
+                business_id: profile.business_id,
+                branch_id: branchId || null,
+                staff_id: staffId,
+            }
+            console.log('Invite payload:', payload)
+
+            const response = await fetch(functionUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify(payload),
+            })
+
+            const result = await response.json()
+            console.log('Invite response:', result)
+
+            if (!response.ok) {
+                throw new Error(result.error || `HTTP ${response.status}: Failed to send invite`)
+            }
+
+            setInviteStatus('sent')
+            return true
+        } catch (err) {
+            console.error('Invite error:', err)
+            setInviteStatus('failed')
+            setError(`Invite failed: ${err.message}. The staff member was added but they won't receive an email. You can resend invite later.`)
+            return false
+        } finally {
+            setInviting(false)
+        }
+    }
+
     async function handleSave() {
         setError('')
         if (!form.full_name.trim()) return setError('Full name is required')
@@ -41,6 +96,7 @@ export default function StaffModal({ staff, onClose, onSaved }) {
 
         try {
             if (staff) {
+                // Update existing staff
                 const { error } = await supabase
                     .from('staff')
                     .update({
@@ -54,8 +110,10 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                     })
                     .eq('id', staff.id)
                 if (error) throw error
+
+                onSaved()
             } else {
-                // Create staff record
+                // Create new staff record first
                 const { data: newStaff, error: staffErr } = await supabase
                     .from('staff')
                     .insert({
@@ -67,51 +125,32 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                         role: form.role,
                         salary: Number(form.salary) || 0,
                         salary_frequency: form.salary_frequency,
+                        invite_sent: false, // Start with false
                     })
                     .select()
                     .single()
                 if (staffErr) throw staffErr
 
                 // Send invite if email provided
-                // Replace the entire invite block:
                 if (form.email.trim()) {
-                    setInviting(true)
-                    const { data: { session } } = await supabase.auth.getSession()
+                    await sendInvite(newStaff.id, form.email, form.full_name, form.role, form.branch_id)
 
-                    const response = await fetch(
-                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-staff`,
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${session.access_token}`,
-                            },
-                            body: JSON.stringify({
-                                email: form.email.trim(),
-                                full_name: form.full_name.trim(),
-                                role: form.role,
-                                business_id: profile.business_id,
-                                branch_id: form.branch_id || null,
-                                staff_id: newStaff.id,
-                            }),
-                        }
-                    )
-
-                    const result = await response.json()
-                    if (result.error) {
-                        // Don't block — staff record is saved, just show a warning
-                        console.warn('Invite failed:', result.error)
+                    // Update the staff record to mark invite as sent
+                    if (inviteStatus === 'sent') {
+                        await supabase
+                            .from('staff')
+                            .update({ invite_sent: true })
+                            .eq('id', newStaff.id)
                     }
-                    setInviting(false)
                 }
-            }
 
-            onSaved()
+                onSaved()
+            }
         } catch (err) {
             setError(err.message)
+            setLoading(false)
         } finally {
             setLoading(false)
-            setInviting(false)
         }
     }
 
@@ -126,10 +165,20 @@ export default function StaffModal({ staff, onClose, onSaved }) {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                    {error && <p className="text-sm text-red-500">{error}</p>}
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                            <p className="text-sm text-red-600">{error}</p>
+                        </div>
+                    )}
+
+                    {inviteStatus === 'sent' && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                            <p className="text-sm text-green-600">✓ Invite sent successfully to {form.email}</p>
+                        </div>
+                    )}
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                         <input
                             name="full_name"
                             value={form.full_name}
