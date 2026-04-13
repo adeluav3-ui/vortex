@@ -163,6 +163,7 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
             amount: amount * 100,
             plan: planCode,
             currency: 'NGN',
+            channels: ['card'],
             ref: `VTX-TRIAL-${businessId.slice(0, 8)}-${Date.now()}`,
             metadata: {
                 business_id: businessId,

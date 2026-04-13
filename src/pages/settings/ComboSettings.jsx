@@ -147,6 +147,7 @@ export default function ComboSettings() {
             amount: amount * 100,
             plan: planCode,
             currency: 'NGN',
+            channels: ['card'],
             ref: `VTX-COMBO-${profile.business_id.slice(0, 8)}-${Date.now()}`,
             metadata: {
                 business_id: profile.business_id,
