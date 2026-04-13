@@ -23,11 +23,14 @@ export default function VendorCustomers() {
     const [customers, setCustomers] = useState([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
-    const [filter, setFilter] = useState('all') // all | owes
+    const [filter, setFilter] = useState('all')
     const [selected, setSelected] = useState(null)
     const [selectedOrders, setSelectedOrders] = useState([])
     const [selectedProducts, setSelectedProducts] = useState([])
     const [loadingDetail, setLoadingDetail] = useState(false)
+
+    const mode = profile?.businesses?.mode
+    const isCombo = mode === 'combo'
 
     useEffect(() => {
         if (!profile?.business_id) return
@@ -51,9 +54,10 @@ export default function VendorCustomers() {
                 return
             }
 
-            // Fetch all orders for these customers with their items
             const customerIds = customerData.map(c => c.id)
-            const { data: ordersData } = await supabase
+
+            // Fetch vendor orders
+            const { data: vendorOrdersData } = await supabase
                 .from('vendor_orders')
                 .select(`
                     id, customer_id, order_number, total_amount, amount_paid, 
@@ -67,15 +71,33 @@ export default function VendorCustomers() {
                 .neq('status', 'cancelled')
                 .order('created_at', { ascending: false })
 
-            // Fetch delivery costs to exclude them
-            const orderIds = (ordersData ?? []).map(o => o.id)
+            // For combo mode, also fetch POS sales
+            let posSalesData = []
+            if (isCombo) {
+                const { data: salesData } = await supabase
+                    .from('sales')
+                    .select(`
+                        id, customer_id, sale_number, total, payment_status, created_at,
+                        sale_items (
+                            id, product_name, variant_name, quantity, unit_price, subtotal
+                        )
+                    `)
+                    .eq('business_id', profile.business_id)
+                    .in('customer_id', customerIds)
+                    .eq('status', 'completed')
+                    .order('created_at', { ascending: false })
+                posSalesData = salesData ?? []
+            }
+
+            // Fetch delivery costs for vendor orders
+            const vendorOrderIds = (vendorOrdersData ?? []).map(o => o.id)
             const deliveryMap = {}
 
-            if (orderIds.length > 0) {
+            if (vendorOrderIds.length > 0) {
                 const { data: deliveriesData } = await supabase
                     .from('deliveries')
                     .select('order_id, delivery_cost, cost_bearer')
-                    .in('order_id', orderIds)
+                    .in('order_id', vendorOrderIds)
                     .eq('cost_bearer', 'customer')
 
                 for (const delivery of (deliveriesData ?? [])) {
@@ -85,33 +107,37 @@ export default function VendorCustomers() {
 
             // Calculate stats per customer
             const enriched = customerData.map(customer => {
-                const customerOrders = (ordersData ?? []).filter(o => o.customer_id === customer.id)
+                const customerVendorOrders = (vendorOrdersData ?? []).filter(o => o.customer_id === customer.id)
+                const customerPosSales = (posSalesData ?? []).filter(s => s.customer_id === customer.id)
 
-                let totalProductValue = 0  // Total value of products ordered
-                let totalProductPaid = 0   // Total paid for products
+                let totalProductValue = 0
+                let totalProductPaid = 0
+                let totalOrders = customerVendorOrders.length + customerPosSales.length
 
-                for (const order of customerOrders) {
+                // Process vendor orders
+                for (const order of customerVendorOrders) {
                     const deliveryCost = deliveryMap[order.id] || 0
-
-                    // Calculate total product value for this order (sum of all item subtotals)
                     const orderProductValue = order.order_items?.reduce((sum, item) => sum + Number(item.subtotal), 0) || 0
                     totalProductValue += orderProductValue
 
-                    // Calculate how much of the payment went to products (not delivery)
-                    // If order is fully paid, product payment = product value
-                    // If partially paid, allocate payment proportionally
                     const totalOrderValue = Number(order.total_amount)
                     const productRatio = totalOrderValue > 0 ? orderProductValue / totalOrderValue : 1
                     const productPayment = Math.min(orderProductValue, Number(order.amount_paid) * productRatio)
-
                     totalProductPaid += productPayment
+                }
+
+                // Process POS sales for combo mode
+                for (const sale of customerPosSales) {
+                    const saleProductValue = sale.sale_items?.reduce((sum, item) => sum + Number(item.subtotal), 0) || sale.total || 0
+                    totalProductValue += saleProductValue
+                    totalProductPaid += saleProductValue // POS sales are fully paid
                 }
 
                 const outstanding = totalProductValue - totalProductPaid
 
                 return {
                     ...customer,
-                    totalOrders: customerOrders.length,
+                    totalOrders,
                     totalProductValue,
                     totalProductPaid,
                     outstanding: Math.max(0, outstanding)
@@ -131,8 +157,8 @@ export default function VendorCustomers() {
         setLoadingDetail(true)
 
         try {
-            // Fetch orders for this customer with items
-            const { data: orders } = await supabase
+            // Fetch vendor orders for this customer
+            const { data: vendorOrders } = await supabase
                 .from('vendor_orders')
                 .select(`
                     id, order_number, total_amount, amount_paid, balance_due,
@@ -146,15 +172,33 @@ export default function VendorCustomers() {
                 .neq('status', 'cancelled')
                 .order('created_at', { ascending: false })
 
-            // Fetch delivery costs
-            const orderIds = (orders ?? []).map(o => o.id)
+            // For combo mode, also fetch POS sales
+            let posSales = []
+            if (isCombo) {
+                const { data: salesData } = await supabase
+                    .from('sales')
+                    .select(`
+                        id, sale_number, total, payment_status, created_at,
+                        sale_items (
+                            product_name, variant_name, quantity, unit_price, subtotal
+                        )
+                    `)
+                    .eq('business_id', profile.business_id)
+                    .eq('customer_id', customer.id)
+                    .eq('status', 'completed')
+                    .order('created_at', { ascending: false })
+                posSales = salesData ?? []
+            }
+
+            // Fetch delivery costs for vendor orders
+            const vendorOrderIds = (vendorOrders ?? []).map(o => o.id)
             const deliveryMap = {}
 
-            if (orderIds.length > 0) {
+            if (vendorOrderIds.length > 0) {
                 const { data: deliveriesData } = await supabase
                     .from('deliveries')
                     .select('order_id, delivery_cost, cost_bearer')
-                    .in('order_id', orderIds)
+                    .in('order_id', vendorOrderIds)
                     .eq('cost_bearer', 'customer')
 
                 for (const delivery of (deliveriesData ?? [])) {
@@ -162,8 +206,8 @@ export default function VendorCustomers() {
                 }
             }
 
-            // Process orders with delivery excluded
-            const processedOrders = (orders ?? []).map(order => {
+            // Process vendor orders
+            const processedVendorOrders = (vendorOrders ?? []).map(order => {
                 const deliveryCost = deliveryMap[order.id] || 0
                 const orderProductValue = order.order_items?.reduce((sum, item) => sum + Number(item.subtotal), 0) || 0
                 const totalOrderValue = Number(order.total_amount)
@@ -176,31 +220,67 @@ export default function VendorCustomers() {
                     deliveryCost,
                     orderProductValue,
                     productPaid,
-                    productBalance
+                    productBalance,
+                    source: 'vendor'
                 }
             })
 
-            setSelectedOrders(processedOrders)
+            // Process POS sales for combo mode
+            const processedPosSales = posSales.map(sale => {
+                const saleProductValue = sale.sale_items?.reduce((sum, item) => sum + Number(item.subtotal), 0) || sale.total || 0
+                return {
+                    id: sale.id,
+                    order_number: sale.sale_number,
+                    total_amount: sale.total,
+                    amount_paid: sale.total,
+                    balance_due: 0,
+                    payment_status: 'paid',
+                    status: 'completed',
+                    created_at: sale.created_at,
+                    order_items: sale.sale_items || [],
+                    orderProductValue: saleProductValue,
+                    productPaid: saleProductValue,
+                    productBalance: 0,
+                    deliveryCost: 0,
+                    source: 'pos'
+                }
+            })
+
+            // Combine and sort all transactions
+            const allTransactions = [...processedVendorOrders, ...processedPosSales]
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+            setSelectedOrders(allTransactions)
 
             // Build product summary across all orders
             const productMap = {}
-            for (const order of processedOrders) {
-                const paymentRatio = order.orderProductValue > 0 ? order.productPaid / order.orderProductValue : 0
 
+            // Process vendor orders
+            for (const order of processedVendorOrders) {
+                const paymentRatio = order.orderProductValue > 0 ? order.productPaid / order.orderProductValue : 0
                 for (const item of (order.order_items ?? [])) {
                     const key = item.product_name + (item.variant_name ? ` (${item.variant_name})` : '')
                     if (!productMap[key]) {
-                        productMap[key] = {
-                            name: key,
-                            totalQty: 0,
-                            totalValue: 0,
-                            totalPaid: 0
-                        }
+                        productMap[key] = { name: key, totalQty: 0, totalValue: 0, totalPaid: 0 }
                     }
                     productMap[key].totalQty += Number(item.quantity)
                     const itemValue = Number(item.subtotal)
                     productMap[key].totalValue += itemValue
                     productMap[key].totalPaid += itemValue * paymentRatio
+                }
+            }
+
+            // Process POS sales for combo mode
+            for (const sale of processedPosSales) {
+                for (const item of (sale.order_items ?? [])) {
+                    const key = item.product_name + (item.variant_name ? ` (${item.variant_name})` : '')
+                    if (!productMap[key]) {
+                        productMap[key] = { name: key, totalQty: 0, totalValue: 0, totalPaid: 0 }
+                    }
+                    productMap[key].totalQty += Number(item.quantity)
+                    const itemValue = Number(item.subtotal)
+                    productMap[key].totalValue += itemValue
+                    productMap[key].totalPaid += itemValue // POS sales are fully paid
                 }
             }
 
@@ -321,30 +401,36 @@ export default function VendorCustomers() {
                                 {/* Order history */}
                                 <div>
                                     <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 border-t border-gray-100">
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Order History</p>
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Transaction History</p>
                                     </div>
                                     {selectedOrders.length === 0 ? (
-                                        <div className="py-10 text-center text-sm text-gray-400">No orders yet</div>
+                                        <div className="py-10 text-center text-sm text-gray-400">No transactions yet</div>
                                     ) : (
                                         <div className="divide-y divide-gray-50">
                                             {selectedOrders.map(order => (
                                                 <div
                                                     key={order.id}
-                                                    onClick={() => { setSelected(null); navigate(`/orders/${order.id}`) }}
+                                                    onClick={() => { setSelected(null); navigate(order.source === 'vendor' ? `/orders/${order.id}` : `/sales`) }}
                                                     className="px-5 py-3 hover:bg-gray-50 cursor-pointer transition"
                                                 >
                                                     <div className="flex items-start justify-between">
                                                         <div>
                                                             <div className="flex items-center gap-2">
                                                                 <p className="text-sm font-medium text-gray-900">{order.order_number}</p>
-                                                                <span className={`text-xs font-medium capitalize ${STATUS_COLORS[order.status]}`}>{order.status}</span>
+                                                                {order.source === 'pos' && (
+                                                                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">POS</span>
+                                                                )}
+                                                                <span className={`text-xs font-medium capitalize ${STATUS_COLORS[order.status]}`}>
+                                                                    {order.status === 'completed' ? 'Completed' : order.status}
+                                                                </span>
                                                             </div>
                                                             <p className="text-xs text-gray-400 mt-0.5">
                                                                 {new Date(order.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                             </p>
                                                             {order.order_items?.length > 0 && (
                                                                 <p className="text-xs text-gray-400 mt-0.5 truncate max-w-44">
-                                                                    {order.order_items.map(i => i.product_name).join(', ')}
+                                                                    {order.order_items.slice(0, 2).map(i => i.product_name).join(', ')}
+                                                                    {order.order_items.length > 2 && '...'}
                                                                 </p>
                                                             )}
                                                         </div>
