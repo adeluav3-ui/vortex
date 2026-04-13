@@ -245,7 +245,7 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
                 <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl z-10 overflow-hidden">
 
                     {/* Top banner */}
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-center">
+                    <div className="bg-linear-to-r from-blue-600 to-indigo-600 px-6 py-5 text-center">
                         <p className="text-xs font-semibold text-blue-200 uppercase tracking-widest mb-1">Free Trial Ended</p>
                         <h2 className="text-xl font-bold text-white">Your {trialDays}-day trial has expired</h2>
                         <p className="text-sm text-blue-100 mt-1">

@@ -57,10 +57,61 @@ const RETAIL_PLANS = [
     },
 ]
 
+// Combo Plans (NEW)
+const COMBO_PLANS = [
+    {
+        tier: 'combo_basic',
+        name: 'Basic',
+        monthlyPrice: 12500,
+        yearlyPrice: 127500,
+        features: [
+            '1 branch',
+            '2 staff accounts',
+            'Up to 50 products',
+            '100 orders/month',
+            'Sales / POS + Order management',
+            'Inventory + Customers',
+            'Expenses + Logistics directory',
+        ],
+    },
+    {
+        tier: 'combo_standard',
+        name: 'Standard',
+        monthlyPrice: 24500,
+        yearlyPrice: 249900,
+        badge: 'Most Popular',
+        features: [
+            'Up to 3 branches',
+            '15 staff accounts',
+            'Up to 200 products',
+            '500 orders/month',
+            'Full Reports',
+            'Stock transfers',
+            'Payment tracking + Delivery tracking',
+        ],
+    },
+    {
+        tier: 'combo_premium',
+        name: 'Premium',
+        monthlyPrice: 43000,
+        yearlyPrice: 438600,
+        badge: 'Best Value',
+        features: [
+            'Unlimited branches',
+            'Unlimited staff',
+            'Unlimited products',
+            'Unlimited orders',
+            'Audit logs',
+            'Storefront link',
+            'Priority support',
+        ],
+    },
+]
+
 export default function LandingPage() {
     const navigate = useNavigate()
     const { user } = useAuth()
-    const [pricingTab, setPricingTab] = useState('vendors') // 'vendors' or 'retail'
+    const [pricingTab, setPricingTab] = useState('vendors') // 'vendors', 'retail', or 'combo'
     const [billingInterval, setBillingInterval] = useState('monthly')
 
     if (user) {
@@ -68,10 +119,16 @@ export default function LandingPage() {
         return null
     }
 
-    const currentPlans = pricingTab === 'vendors' ? VENDOR_PLANS : RETAIL_PLANS
+    const getCurrentPlans = () => {
+        if (pricingTab === 'vendors') return VENDOR_PLANS
+        if (pricingTab === 'retail') return RETAIL_PLANS
+        return COMBO_PLANS
+    }
+
+    const currentPlans = getCurrentPlans()
 
     return (
-        <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-blue-50">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
             {/* Navigation Bar */}
             <nav className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -180,8 +237,8 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* Two Modes Section */}
-            <section className="py-20 bg-linear-to-br from-blue-50 to-white">
+            {/* Three Modes Section */}
+            <section className="py-20 bg-gradient-to-br from-blue-50 to-white">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -192,7 +249,7 @@ export default function LandingPage() {
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         {/* Online Vendor Card */}
                         <div className="bg-white rounded-2xl p-8 border border-blue-100 shadow-sm hover:shadow-md transition">
                             <div className="text-5xl mb-4">📱</div>
@@ -234,6 +291,27 @@ export default function LandingPage() {
                                 </li>
                             </ul>
                         </div>
+
+                        {/* Combo Card - NEW */}
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-200 shadow-md hover:shadow-lg transition">
+                            <div className="text-5xl mb-4">🏪📦</div>
+                            <h3 className="text-2xl font-bold text-gray-900 mb-2">Both (Store + Online)</h3>
+                            <p className="text-gray-600 mb-4">For businesses with a physical store AND an online presence</p>
+                            <ul className="space-y-2 mb-6">
+                                <li className="flex items-center gap-2 text-sm text-gray-700">
+                                    <span className="text-blue-500">✓</span> Everything from Retail AND Vendor
+                                </li>
+                                <li className="flex items-center gap-2 text-sm text-gray-700">
+                                    <span className="text-blue-500">✓</span> Shared inventory and customers
+                                </li>
+                                <li className="flex items-center gap-2 text-sm text-gray-700">
+                                    <span className="text-blue-500">✓</span> Mode switcher — one dashboard, two views
+                                </li>
+                                <li className="flex items-center gap-2 text-sm text-gray-700">
+                                    <span className="text-blue-500">✓</span> Unified reporting and analytics
+                                </li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -250,9 +328,9 @@ export default function LandingPage() {
                         </p>
                     </div>
 
-                    {/* Pricing Tabs */}
+                    {/* Pricing Tabs - Updated with Combo */}
                     <div className="flex justify-center mb-8">
-                        <div className="bg-gray-100 rounded-xl p-1 flex gap-1">
+                        <div className="bg-gray-100 rounded-xl p-1 flex flex-wrap justify-center gap-1">
                             <button
                                 onClick={() => setPricingTab('vendors')}
                                 className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${pricingTab === 'vendors'
@@ -270,6 +348,15 @@ export default function LandingPage() {
                                     }`}
                             >
                                 🏪 For Retail Stores
+                            </button>
+                            <button
+                                onClick={() => setPricingTab('combo')}
+                                className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${pricingTab === 'combo'
+                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                            >
+                                🏪📦 Both (Store + Online)
                             </button>
                         </div>
                     </div>
@@ -343,7 +430,7 @@ export default function LandingPage() {
                     </div>
 
                     <p className="text-center text-sm text-gray-500 mt-8">
-                        All plans include a 14-day free trial for vendors. No credit card required.
+                        Vendors get a 14-day free trial. Retail and Combo plans include a 7-day free trial. No credit card required to start.
                     </p>
                 </div>
             </section>
