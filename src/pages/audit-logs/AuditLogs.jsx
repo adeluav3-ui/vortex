@@ -16,6 +16,13 @@ const ACTION_ICONS = {
     'settings.updated': { icon: '⚙️', color: 'bg-gray-50 text-gray-600' },
     'subscription.changed': { icon: '💳', color: 'bg-blue-50 text-blue-600' },
     'customer.created': { icon: '👥', color: 'bg-green-50 text-green-600' },
+    'order.created': { icon: '🛍️', color: 'bg-purple-50 text-purple-600' },
+    'order.updated': { icon: '✏️', color: 'bg-yellow-50 text-yellow-600' },
+    'order.cancelled': { icon: '❌', color: 'bg-red-50 text-red-600' },
+    'payment.recorded': { icon: '💳', color: 'bg-green-50 text-green-600' },
+    'delivery.created': { icon: '🚚', color: 'bg-indigo-50 text-indigo-600' },
+    'delivery.updated': { icon: '📦', color: 'bg-blue-50 text-blue-600' },
+    'invoice.generated': { icon: '🧾', color: 'bg-amber-50 text-amber-600' },
 }
 
 const ACTION_LABELS = {
@@ -31,6 +38,13 @@ const ACTION_LABELS = {
     'settings.updated': 'Updated settings',
     'subscription.changed': 'Changed subscription',
     'customer.created': 'Added a customer',
+    'order.created': 'Created an order',
+    'order.updated': 'Updated an order',
+    'order.cancelled': 'Cancelled an order',
+    'payment.recorded': 'Recorded a payment',
+    'delivery.created': 'Added delivery info',
+    'delivery.updated': 'Updated delivery status',
+    'invoice.generated': 'Generated an invoice',
 }
 
 const FILTERS = [
