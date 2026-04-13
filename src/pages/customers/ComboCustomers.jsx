@@ -71,7 +71,7 @@ export default function ComboCustomers() {
             // Fetch ALL POS sales for this business (no customer_id filter in query)
             const { data: allPosSales, error: posError } = await supabase
                 .from('sales')
-                .select('id, customer_id, sale_number, total, payment_status, created_at')
+                .select('id, customer_id, sale_number, total, status, created_at')
                 .eq('business_id', profile.business_id)
                 .eq('status', 'completed')
                 .order('created_at', { ascending: false })
@@ -195,7 +195,7 @@ export default function ComboCustomers() {
             // Fetch ALL POS sales for this customer
             const { data: posSales } = await supabase
                 .from('sales')
-                .select('id, sale_number, total, payment_status, created_at')
+                .select('id, sale_number, total, status, created_at')
                 .eq('business_id', profile.business_id)
                 .eq('customer_id', customer.id)
                 .eq('status', 'completed')
