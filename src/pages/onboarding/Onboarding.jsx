@@ -1,3 +1,4 @@
+// src/pages/onboarding/Onboarding.jsx
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -16,6 +17,12 @@ const BUSINESS_MODES = [
         label: 'Online Vendor',
         icon: '📦',
         desc: 'I sell online via WhatsApp, Instagram, or my website and need to manage orders & deliveries.',
+    },
+    {
+        value: 'combo',
+        label: 'Both (Store + Online)',
+        icon: '🏪📦',
+        desc: 'I have a physical store AND sell online — manage everything from one dashboard.',
     },
 ]
 
@@ -115,8 +122,72 @@ const VENDOR_PLANS = [
     },
 ]
 
+// ─── Combo Plans ──────────────────────────────────────────────────────────────
+const COMBO_PLANS = [
+    {
+        tier: 'combo_basic',
+        name: 'Basic',
+        monthlyPrice: 12500,
+        yearlyPrice: 127500,
+        monthlyCode: 'PLN_hlm3uftf4cpg8bb',
+        yearlyCode: 'PLN_urqq1jm9sm43nbn',
+        features: [
+            '1 branch',
+            '2 staff accounts',
+            'Up to 50 products',
+            '100 orders/month',
+            'Sales / POS',
+            'Order management',
+            'Inventory',
+            'Customers',
+            'Expenses',
+            'Logistics directory',
+        ],
+    },
+    {
+        tier: 'combo_standard',
+        name: 'Standard',
+        monthlyPrice: 24500,
+        yearlyPrice: 249900,
+        monthlyCode: 'PLN_94h10u6wc2bh9eb',
+        yearlyCode: 'PLN_woec9ujwshc6fh5',
+        badge: 'Most Popular',
+        features: [
+            'Up to 3 branches',
+            '15 staff accounts',
+            'Up to 200 products',
+            '500 orders/month',
+            'Everything in Basic',
+            'Full Reports',
+            'Stock transfers',
+            'Payment tracking',
+            'Delivery tracking',
+        ],
+    },
+    {
+        tier: 'combo_premium',
+        name: 'Premium',
+        monthlyPrice: 43000,
+        yearlyPrice: 438600,
+        monthlyCode: 'PLN_020qaqdryasz5ma',
+        yearlyCode: 'PLN_wh4ia00b29ve9db',
+        badge: 'Best Value',
+        features: [
+            'Unlimited branches',
+            'Unlimited staff',
+            'Unlimited products',
+            'Unlimited orders',
+            'Everything in Standard',
+            'Audit logs',
+            'Storefront link',
+            'Priority support',
+        ],
+    },
+]
+
 const RETAIL_STEPS = ['Business Info', 'Contact & Address', 'Main Branch', 'Choose Plan', 'Payment']
 const VENDOR_STEPS = ['Business Info', 'Contact & Address', 'Choose Plan', 'Start Trial']
+const COMBO_STEPS = ['Business Info', 'Contact & Address', 'Main Branch', 'Choose Plan', 'Payment']
 
 export default function Onboarding() {
     const navigate = useNavigate()
@@ -130,12 +201,14 @@ export default function Onboarding() {
     const [billingInterval, setBillingInterval] = useState('monthly')
     const [selectedPlan, setSelectedPlan] = useState(null)
     const [customBusinessType, setCustomBusinessType] = useState('')
+    const [customVendorCategory, setCustomVendorCategory] = useState('')
     const [paystackReady, setPaystackReady] = useState(false)
 
     const [form, setForm] = useState({
         business_mode: '',
         business_name: '',
         business_type: '',
+        vendor_category: '',
         phone: '',
         email: '',
         address: '',
@@ -143,10 +216,12 @@ export default function Onboarding() {
     })
 
     const isVendor = form.business_mode === 'online_vendor'
-    const STEPS = isVendor ? VENDOR_STEPS : RETAIL_STEPS
-    const PLANS = isVendor ? VENDOR_PLANS : RETAIL_PLANS
+    const isCombo = form.business_mode === 'combo'
+    const STEPS = isVendor ? VENDOR_STEPS : (isCombo ? COMBO_STEPS : RETAIL_STEPS)
+    const PLANS = isVendor ? VENDOR_PLANS : (isCombo ? COMBO_PLANS : RETAIL_PLANS)
     const currentCategories = isVendor ? VENDOR_CATEGORIES : RETAIL_TYPES
     const showOthersField = form.business_type === 'others'
+    const showVendorCategoryField = isCombo || isVendor
 
     useEffect(() => {
         const script = document.createElement('script')
@@ -179,11 +254,20 @@ export default function Onboarding() {
         setError('')
         if (step === 1 && !form.business_mode) return setError('Please select how you run your business')
         if (step === 1 && !form.business_name.trim()) return setError('Business name is required')
-        if (step === 1 && !form.business_type) return setError('Please select what you sell')
-        if (step === 1 && form.business_type === 'others' && !customBusinessType.trim()) return setError('Please describe what you sell')
+
+        // Business type validation
+        if (step === 1 && !isVendor && !isCombo && !form.business_type) return setError('Please select a business type')
+        if (step === 1 && !isVendor && !isCombo && form.business_type === 'others' && !customBusinessType.trim()) return setError('Please describe your business type')
+
+        // Vendor category validation (for vendor and combo)
+        if (step === 1 && showVendorCategoryField && !form.vendor_category) return setError('Please select what you sell')
+        if (step === 1 && showVendorCategoryField && form.vendor_category === 'others' && !customVendorCategory.trim()) return setError('Please describe what you sell')
+
         if (!isVendor && step === 3 && !form.branch_name.trim()) return setError('Branch name is required')
-        const planStep = isVendor ? 3 : 4
+
+        const planStep = isVendor ? 3 : (isCombo ? 4 : 4)
         if (step === planStep && !selectedPlan) return setError('Please select a plan to continue')
+
         setStep(step + 1)
     }
 
@@ -192,9 +276,6 @@ export default function Onboarding() {
         setStep(step - 1)
     }
 
-    // ── Creates business, branch, profile link, and subscription ────────────
-    // For vendors: called immediately (no payment needed for trial)
-    // For retail: called INSIDE the Paystack callback AFTER payment succeeds
     async function setupBusiness({ tier, status, isTrial = false, trialStart = null, trialEnd = null }) {
         try {
             let logo_url = null
@@ -210,7 +291,18 @@ export default function Onboarding() {
                 }
             }
 
-            const resolvedType = form.business_type === 'others' ? customBusinessType.trim() : form.business_type
+            // For combo, store both business_type and vendor_category
+            let businessType = null
+            let vendorCategory = null
+
+            if (isCombo) {
+                businessType = form.business_type === 'others' ? customBusinessType.trim() : form.business_type
+                vendorCategory = form.vendor_category === 'others' ? customVendorCategory.trim() : form.vendor_category
+            } else if (isVendor) {
+                vendorCategory = form.vendor_category === 'others' ? customVendorCategory.trim() : form.vendor_category
+            } else {
+                businessType = form.business_type === 'others' ? customBusinessType.trim() : form.business_type
+            }
 
             const { data: business, error: bizError } = await supabase
                 .from('businesses')
@@ -221,7 +313,8 @@ export default function Onboarding() {
                     address: form.address.trim() || null,
                     logo_url,
                     mode: form.business_mode,
-                    business_type: resolvedType,
+                    business_type: businessType,
+                    vendor_category: vendorCategory,
                 })
                 .select()
                 .single()
@@ -242,7 +335,11 @@ export default function Onboarding() {
 
             const { error: profileError } = await supabase
                 .from('profiles')
-                .update({ business_id: business.id, branch_id: branch.id })
+                .update({
+                    business_id: business.id,
+                    branch_id: branch.id,
+                    dashboard_view: isCombo ? 'retail' : null, // Default view for combo users
+                })
                 .eq('id', user.id)
             if (profileError) throw profileError
 
@@ -268,7 +365,7 @@ export default function Onboarding() {
         }
     }
 
-    // ── Vendor: start 14-day trial immediately, no payment ───────────────────
+    // Vendor: start 14-day trial immediately, no payment
     async function handleStartTrial() {
         setError('')
         setLoading(true)
@@ -294,7 +391,7 @@ export default function Onboarding() {
         }
     }
 
-    // ── Retail: open Paystack, create business ONLY after successful payment ──
+    // Retail or Combo: open Paystack, create business ONLY after successful payment
     async function handlePayment() {
         setError('')
 
@@ -305,7 +402,6 @@ export default function Onboarding() {
 
         setLoading(true)
 
-        // Validate everything before opening Paystack
         if (!selectedPlan) {
             setError('Please select a plan.')
             setLoading(false)
@@ -315,9 +411,7 @@ export default function Onboarding() {
         const planCode = billingInterval === 'yearly' ? selectedPlan.yearlyCode : selectedPlan.monthlyCode
         const amount = billingInterval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice
 
-        // Brief delay to let loading state render before Paystack iframe opens
         await new Promise(resolve => setTimeout(resolve, 100))
-
         setLoading(false)
 
         const handler = window.PaystackPop.setup({
@@ -335,24 +429,25 @@ export default function Onboarding() {
                 mode: form.business_mode,
             },
             onClose: () => {
-                // User dismissed Paystack — nothing created yet, they can try again
                 setError('Payment was cancelled. You can try again when ready.')
             },
             callback: function () {
-                // ── Payment successful — NOW create the business ──────────────
-                // Wrapped in plain function because Paystack rejects async callbacks
                 async function onSuccess() {
                     setLoading(true)
                     try {
+                        const now = new Date()
+                        const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+
                         await setupBusiness({
                             tier: selectedPlan.tier,
-                            status: 'active',
+                            status: 'trialing',
+                            isTrial: true,
+                            trialStart: now.toISOString(),
+                            trialEnd: trialEnd.toISOString(),
                         })
                         await fetchProfile(user.id)
                         navigate('/dashboard')
                     } catch (err) {
-                        // Payment went through but business creation failed.
-                        // Show a clear message so they can contact support.
                         setError(
                             `Payment was successful but setup encountered an error: ${err.message}. ` +
                             `Please contact support with your email address and we'll sort it out immediately.`
@@ -368,15 +463,18 @@ export default function Onboarding() {
     }
 
     function handleFinalStep() {
-        if (isVendor) handleStartTrial()
-        else handlePayment()
+        if (isVendor) {
+            handleStartTrial()
+        } else {
+            handlePayment()
+        }
     }
 
     const totalSteps = STEPS.length
 
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
-            <div className={`bg-white rounded-2xl shadow w-full ${step === (isVendor ? 3 : 4) ? 'max-w-3xl' : 'max-w-lg'} p-8 transition-all duration-300`}>
+            <div className={`bg-white rounded-2xl shadow w-full ${step === (isVendor ? 3 : (isCombo ? 4 : 4)) ? 'max-w-3xl' : 'max-w-lg'} p-8 transition-all duration-300`}>
 
                 {/* Logo */}
                 <div className="flex flex-col items-center justify-center mb-8 pb-4 border-b border-gray-100">
@@ -411,7 +509,12 @@ export default function Onboarding() {
                             <div className="grid grid-cols-1 gap-3">
                                 {BUSINESS_MODES.map(mode => (
                                     <button key={mode.value} type="button"
-                                        onClick={() => { setForm({ ...form, business_mode: mode.value, business_type: '' }); setSelectedPlan(null); setCustomBusinessType('') }}
+                                        onClick={() => {
+                                            setForm({ ...form, business_mode: mode.value, business_type: '', vendor_category: '' })
+                                            setSelectedPlan(null)
+                                            setCustomBusinessType('')
+                                            setCustomVendorCategory('')
+                                        }}
                                         className={`border-2 rounded-xl px-4 py-3 text-left transition flex items-start gap-3 ${form.business_mode === mode.value ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}
                                     >
                                         <span className="text-2xl mt-0.5">{mode.icon}</span>
@@ -441,17 +544,18 @@ export default function Onboarding() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Business Name <span className="text-red-500">*</span></label>
                             <input name="business_name" value={form.business_name} onChange={handleChange}
-                                placeholder={isVendor ? "e.g. Adaeze's Closet" : "e.g. Mama Tee's Kitchen"}
+                                placeholder="e.g. Adaeze's Store"
                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
 
-                        {form.business_mode && (
+                        {/* Business Type - for Retail and Combo */}
+                        {form.business_mode && !isVendor && (
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    {isVendor ? 'What do you sell?' : 'Business Type'} <span className="text-red-500">*</span>
+                                    Business Type <span className="text-red-500">*</span>
                                 </label>
                                 <div className="grid grid-cols-2 gap-2">
-                                    {currentCategories.map(type => (
+                                    {RETAIL_TYPES.map(type => (
                                         <button key={type.value} type="button"
                                             onClick={() => { setForm({ ...form, business_type: type.value }); if (type.value !== 'others') setCustomBusinessType('') }}
                                             className={`border rounded-lg px-3 py-2.5 text-sm font-medium transition text-left ${form.business_type === type.value ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700 hover:border-gray-400'}`}
@@ -463,10 +567,38 @@ export default function Onboarding() {
                                 {showOthersField && (
                                     <div className="mt-3">
                                         <input value={customBusinessType} onChange={e => setCustomBusinessType(e.target.value)}
-                                            placeholder={isVendor ? 'e.g. Handmade candles, Custom cakes...' : 'e.g. Laundry service, Event planning...'}
+                                            placeholder="e.g. Laundry service, Event planning..."
                                             className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50"
                                             autoFocus />
-                                        <p className="text-xs text-gray-400 mt-1">Describe what you sell in a few words</p>
+                                        <p className="text-xs text-gray-400 mt-1">Describe your business type</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Vendor Category - for Vendor and Combo */}
+                        {form.business_mode && showVendorCategoryField && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    What do you sell? <span className="text-red-500">*</span>
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {VENDOR_CATEGORIES.map(cat => (
+                                        <button key={cat.value} type="button"
+                                            onClick={() => { setForm({ ...form, vendor_category: cat.value }); if (cat.value !== 'others') setCustomVendorCategory('') }}
+                                            className={`border rounded-lg px-3 py-2.5 text-sm font-medium transition text-left ${form.vendor_category === cat.value ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700 hover:border-gray-400'}`}
+                                        >
+                                            {cat.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                {form.vendor_category === 'others' && (
+                                    <div className="mt-3">
+                                        <input value={customVendorCategory} onChange={e => setCustomVendorCategory(e.target.value)}
+                                            placeholder="e.g. Handmade candles, Custom cakes..."
+                                            className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                                            autoFocus />
+                                        <p className="text-xs text-gray-400 mt-1">Describe what you sell</p>
                                     </div>
                                 )}
                             </div>
@@ -492,7 +624,7 @@ export default function Onboarding() {
                     </div>
                 )}
 
-                {/* ── Step 3: Main Branch (retail only) ── */}
+                {/* ── Step 3: Main Branch (retail or combo only) ── */}
                 {!isVendor && step === 3 && (
                     <div className="space-y-4">
                         <p className="text-sm text-gray-500">Every business starts with a main branch. You can add more branches later from your settings.</p>
@@ -544,6 +676,14 @@ export default function Onboarding() {
                                 </p>
                             </div>
                         )}
+                        {(isCombo || !isVendor) && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                                <span className="text-lg">🎁</span>
+                                <p className="text-xs text-blue-800 leading-relaxed">
+                                    <span className="font-semibold">7-day free trial</span> — You'll get full access to your chosen plan for 7 days. No charges until your trial ends.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -578,7 +718,7 @@ export default function Onboarding() {
                     </div>
                 )}
 
-                {/* ── Retail Payment Summary Step ── */}
+                {/* ── Retail/Combo Payment Summary Step ── */}
                 {!isVendor && step === 5 && selectedPlan && (
                     <div className="space-y-5">
                         <div className="bg-blue-50 rounded-xl p-5 space-y-3">
@@ -593,8 +733,9 @@ export default function Onboarding() {
                         </div>
                         <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500 space-y-1">
                             <p>✓ Secure payment powered by Paystack</p>
+                            <p>✓ 7-day free trial — your first payment will be charged after the trial ends</p>
                             <p>✓ Auto-renews {billingInterval === 'yearly' ? 'annually' : 'monthly'} — cancel anytime</p>
-                            <p>✓ Your account is created immediately after payment</p>
+                            <p>✓ Your account is created immediately</p>
                         </div>
                     </div>
                 )}
@@ -620,7 +761,7 @@ export default function Onboarding() {
                                 ? 'Setting up...'
                                 : isVendor
                                     ? 'Start My Free 14-Day Trial →'
-                                    : `Pay ₦${(billingInterval === 'yearly' ? selectedPlan?.yearlyPrice : selectedPlan?.monthlyPrice)?.toLocaleString()} & Get Started`
+                                    : `Start 7-Day Free Trial →`
                             }
                         </button>
                     )}

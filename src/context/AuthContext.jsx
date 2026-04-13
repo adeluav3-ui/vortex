@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPlanLimits, canAccess } from '../lib/planLimits'
@@ -47,6 +48,11 @@ export function AuthProvider({ children }) {
             data.subscription = subRes.data
             if (data.businesses) {
                 data.businesses.subscription_tier = subRes.data?.tier ?? 'starter'
+            }
+
+            // Set default dashboard_view for combo users
+            if (data.businesses?.mode === 'combo' && !data.dashboard_view) {
+                data.dashboard_view = 'retail'
             }
         }
 

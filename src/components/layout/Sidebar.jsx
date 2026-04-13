@@ -1,6 +1,8 @@
+// src/components/layout/Sidebar.jsx
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import ModeSwitcher from './ModeSwitcher'
 
 const RETAIL_NAV_ITEMS = [
     { path: '/dashboard', label: 'Dashboard', icon: '🏠', module: 'dashboard' },
@@ -38,7 +40,16 @@ export default function Sidebar() {
     const location = useLocation()
 
     const isVendor = profile?.businesses?.mode === 'online_vendor'
-    const navItems = isVendor ? VENDOR_NAV_ITEMS : RETAIL_NAV_ITEMS
+    const isCombo = profile?.businesses?.mode === 'combo'
+    const dashboardView = profile?.dashboard_view || 'retail'
+
+    // For combo users, show nav items based on current view
+    let navItems
+    if (isCombo) {
+        navItems = dashboardView === 'retail' ? RETAIL_NAV_ITEMS : VENDOR_NAV_ITEMS
+    } else {
+        navItems = isVendor ? VENDOR_NAV_ITEMS : RETAIL_NAV_ITEMS
+    }
 
     // Register open function so Navbar can call it
     useEffect(() => {
@@ -93,10 +104,13 @@ export default function Sidebar() {
                 </div>
             </div>
 
+            {/* Mode Switcher - only for combo users */}
+            <ModeSwitcher />
+
             {/* Nav items */}
             <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
                 {navItems
-                    .filter(item => isVendor ? true : hasAccess(item.module))
+                    .filter(item => (isCombo || isVendor) ? true : hasAccess(item.module))
                     .map((item) => (
                         <NavLink
                             key={item.path}

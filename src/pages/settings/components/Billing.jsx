@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 
-const PLANS = [
+// ─── Retail Plans ─────────────────────────────────────────────────────────────
+const RETAIL_PLANS = [
     {
         tier: 'starter',
         name: 'Starter',
@@ -60,6 +61,126 @@ const PLANS = [
     },
 ]
 
+// ─── Vendor Plans ─────────────────────────────────────────────────────────────
+const VENDOR_PLANS = [
+    {
+        tier: 'solo',
+        name: 'Solo',
+        monthlyPrice: 4500,
+        yearlyPrice: 45900,
+        monthlyCode: 'PLN_1dmcxfs006gtl6m',
+        yearlyCode: 'PLN_vp08jxmaekii6m8',
+        color: 'border-gray-200',
+        badge: '',
+        features: [
+            '100 orders/month',
+            '1 user account',
+            'Up to 50 products',
+            'Order management',
+            'Customer tracking',
+            'Logistics directory',
+        ],
+    },
+    {
+        tier: 'hustle',
+        name: 'Hustle',
+        monthlyPrice: 9500,
+        yearlyPrice: 96900,
+        monthlyCode: 'PLN_jgfdsznt7qu4bwm',
+        yearlyCode: 'PLN_vz2eh4f9jvwr0dv',
+        color: 'border-blue-400',
+        badge: 'Most Popular',
+        features: [
+            '500 orders/month',
+            '2 user accounts',
+            'Unlimited products',
+            'Everything in Solo',
+            'Payment tracking',
+            'Delivery tracking',
+        ],
+    },
+    {
+        tier: 'scale',
+        name: 'Scale',
+        monthlyPrice: 18000,
+        yearlyPrice: 183600,
+        monthlyCode: 'PLN_zg2ndbq2x36flcx',
+        yearlyCode: 'PLN_izrkgoyv88a1pss',
+        color: 'border-purple-400',
+        badge: 'Best Value',
+        features: [
+            'Unlimited orders',
+            '5 user accounts',
+            'Unlimited products',
+            'Everything in Hustle',
+            'Full reports & export',
+            'Storefront link',
+            'Priority support',
+        ],
+    },
+]
+
+// ─── Combo Plans ──────────────────────────────────────────────────────────────
+const COMBO_PLANS = [
+    {
+        tier: 'combo_basic',
+        name: 'Basic',
+        monthlyPrice: 12500,
+        yearlyPrice: 127500,
+        monthlyCode: 'PLN_hlm3uftf4cpg8bb',
+        yearlyCode: 'PLN_urqq1jm9sm43nbn',
+        color: 'border-gray-200',
+        badge: '',
+        features: [
+            '1 branch',
+            '2 staff accounts',
+            'Up to 50 products',
+            '100 orders/month',
+            'Sales / POS + Order management',
+            'Inventory + Customers',
+            'Expenses + Logistics directory',
+        ],
+    },
+    {
+        tier: 'combo_standard',
+        name: 'Standard',
+        monthlyPrice: 24500,
+        yearlyPrice: 249900,
+        monthlyCode: 'PLN_94h10u6wc2bh9eb',
+        yearlyCode: 'PLN_woec9ujwshc6fh5',
+        color: 'border-blue-400',
+        badge: 'Most Popular',
+        features: [
+            'Up to 3 branches',
+            '15 staff accounts',
+            'Up to 200 products',
+            '500 orders/month',
+            'Full Reports',
+            'Stock transfers',
+            'Payment tracking + Delivery tracking',
+        ],
+    },
+    {
+        tier: 'combo_premium',
+        name: 'Premium',
+        monthlyPrice: 43000,
+        yearlyPrice: 438600,
+        monthlyCode: 'PLN_020qaqdryasz5ma',
+        yearlyCode: 'PLN_wh4ia00b29ve9db',
+        color: 'border-purple-400',
+        badge: 'Best Value',
+        features: [
+            'Unlimited branches',
+            'Unlimited staff',
+            'Unlimited products',
+            'Unlimited orders',
+            'Audit logs',
+            'Storefront link',
+            'Priority support',
+        ],
+    },
+]
+
 export default function Billing() {
     const { profile, user, fetchProfile } = useAuth()
     const [billingInterval, setBillingInterval] = useState('monthly')
@@ -67,7 +188,16 @@ export default function Billing() {
     const [loading, setLoading] = useState(true)
     const [processingTier, setProcessingTier] = useState(null)
 
+    const mode = profile?.businesses?.mode
     const currentTier = subscription?.tier ?? 'starter'
+
+    // Determine which plans to show based on business mode
+    let displayPlans = RETAIL_PLANS
+    if (mode === 'online_vendor') {
+        displayPlans = VENDOR_PLANS
+    } else if (mode === 'combo') {
+        displayPlans = COMBO_PLANS
+    }
 
     useEffect(() => {
         fetchSubscription()
@@ -100,7 +230,6 @@ export default function Billing() {
         const planCode = billingInterval === 'yearly' ? plan.yearlyCode : plan.monthlyCode
         const amount = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
 
-        // FIXED: Use profile.business_id instead of result.business.id
         const transactionRef = `VTX-${profile.business_id.slice(0, 8)}-${Date.now()}`
 
         const handler = window.PaystackPop.setup({
@@ -120,7 +249,6 @@ export default function Billing() {
                 setProcessingTier(null)
             },
             callback: (response) => {
-                // Optimistically update subscription
                 supabase
                     .from('subscriptions')
                     .update({
@@ -158,7 +286,12 @@ export default function Billing() {
                     <div>
                         <h3 className="text-sm font-semibold text-gray-900 mb-1">Current Plan</h3>
                         <div className="flex items-center gap-3">
-                            <span className="text-2xl font-bold text-gray-900 capitalize">{currentTier}</span>
+                            <span className="text-2xl font-bold text-gray-900 capitalize">
+                                {currentTier === 'combo_basic' ? 'Basic' :
+                                    currentTier === 'combo_standard' ? 'Standard' :
+                                        currentTier === 'combo_premium' ? 'Premium' :
+                                            currentTier}
+                            </span>
                             <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${subscription?.status === 'active'
                                 ? 'bg-green-50 text-green-600'
                                 : subscription?.status === 'trialing'
@@ -214,7 +347,7 @@ export default function Billing() {
 
             {/* Plan cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {PLANS.map(plan => {
+                {displayPlans.map(plan => {
                     const isCurrent = plan.tier === currentTier
                     const price = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
                     const monthlyEquiv = billingInterval === 'yearly'

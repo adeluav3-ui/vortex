@@ -37,13 +37,86 @@ const VENDOR_PLANS = [
     },
 ]
 
-export default function TrialExpiredModal({ businessId, onSubscribed }) {
+// ─── Retail Plans (for trial expiry) ─────────────────────────────────────────
+const RETAIL_PLANS_TRIAL = [
+    {
+        tier: 'starter',
+        name: 'Starter',
+        monthlyPrice: 8000,
+        yearlyPrice: 81600,
+        monthlyCode: 'PLN_grze6zv0gkw5euw',
+        yearlyCode: 'PLN_jz65z74pi7nvbxy',
+        features: ['1 branch', '2 staff accounts', 'Up to 50 products', 'POS + Sales', 'Inventory', 'Expenses'],
+        locked: ['Full Reports', 'Audit logs', 'Unlimited products'],
+    },
+    {
+        tier: 'growth',
+        name: 'Growth',
+        monthlyPrice: 15000,
+        yearlyPrice: 153000,
+        monthlyCode: 'PLN_2bym17e1gqq9a68',
+        yearlyCode: 'PLN_jvas4v10w9qx92w',
+        badge: 'Most Popular',
+        features: ['Up to 3 branches', '15 staff accounts', 'Up to 200 products', 'Full Reports', 'Stock transfers'],
+        locked: ['Audit logs', 'Unlimited products'],
+    },
+    {
+        tier: 'business',
+        name: 'Business',
+        monthlyPrice: 25000,
+        yearlyPrice: 255000,
+        monthlyCode: 'PLN_a2mnjvi7wom1oeu',
+        yearlyCode: 'PLN_j8xvl1sr93ufrmr',
+        badge: '⭐ Your Trial Plan',
+        features: ['Unlimited branches', 'Unlimited staff', 'Unlimited products', 'Full Reports', 'Audit logs', 'Priority support'],
+        locked: [],
+    },
+    {
+        tier: 'combo_basic',
+        name: 'Basic',
+        monthlyPrice: 12500,
+        yearlyPrice: 127500,
+        monthlyCode: 'PLN_hlm3uftf4cpg8bb',
+        yearlyCode: 'PLN_urqq1jm9sm43nbn',
+        features: ['1 branch', '2 staff', '50 products', '100 orders', 'POS + Orders', 'Inventory', 'Customers', 'Expenses'],
+        locked: ['Full Reports', 'Stock transfers', 'Payment tracking', 'Audit logs', 'Storefront'],
+    },
+    {
+        tier: 'combo_standard',
+        name: 'Standard',
+        monthlyPrice: 24500,
+        yearlyPrice: 249900,
+        monthlyCode: 'PLN_94h10u6wc2bh9eb',
+        yearlyCode: 'PLN_woec9ujwshc6fh5',
+        badge: 'Most Popular',
+        features: ['3 branches', '15 staff', '200 products', '500 orders', 'Full Reports', 'Stock transfers', 'Payment tracking'],
+        locked: ['Audit logs', 'Storefront'],
+    },
+    {
+        tier: 'combo_premium',
+        name: 'Premium',
+        monthlyPrice: 43000,
+        yearlyPrice: 438600,
+        monthlyCode: 'PLN_020qaqdryasz5ma',
+        yearlyCode: 'PLN_wh4ia00b29ve9db',
+        badge: '⭐ Your Trial Plan',
+        features: ['Unlimited branches', 'Unlimited staff', 'Unlimited products', 'Unlimited orders', 'Audit logs', 'Storefront', 'Priority support'],
+        locked: [],
+    },
+]
+
+export default function TrialExpiredModal({ businessId, businessMode, onSubscribed }) {
     const { user, fetchProfile } = useAuth()
     const [billingInterval, setBillingInterval] = useState('monthly')
     const [selectedPlan, setSelectedPlan] = useState(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
-    const [showLockWarning, setShowLockWarning] = useState(null) // plan tier being warned
+    const [showLockWarning, setShowLockWarning] = useState(null)
+
+    const isVendor = businessMode !== 'retail'
+    const ACTIVE_PLANS = isVendor ? VENDOR_PLANS : RETAIL_PLANS_TRIAL
+    const trialDays = isVendor ? 14 : 7
+    const trialTopPlan = isVendor ? 'Scale' : 'Business'
 
     // Load Paystack
     useEffect(() => {
@@ -56,7 +129,7 @@ export default function TrialExpiredModal({ businessId, onSubscribed }) {
 
     function handleSelectPlan(plan) {
         // If not Scale, show a lock warning first
-        if (plan.tier !== 'scale' && plan.locked.length > 0) {
+        if (plan.locked.length > 0) {
             setShowLockWarning(plan)
         } else {
             setSelectedPlan(plan)
@@ -90,7 +163,6 @@ export default function TrialExpiredModal({ businessId, onSubscribed }) {
             amount: amount * 100,
             plan: planCode,
             currency: 'NGN',
-            channels: ['card'],
             ref: `VTX-TRIAL-${businessId.slice(0, 8)}-${Date.now()}`,
             metadata: {
                 business_id: businessId,
@@ -101,20 +173,23 @@ export default function TrialExpiredModal({ businessId, onSubscribed }) {
             onClose: () => {
                 setError('Payment was cancelled. Please complete payment to continue using Vortex.')
             },
-            callback: async () => {
-                await supabase
-                    .from('subscriptions')
-                    .update({
-                        status: 'active',
-                        tier: selectedPlan.tier,
-                        is_trial: false,
-                        trial_start: null,
-                        trial_end: null,
-                    })
-                    .eq('business_id', businessId)
+            callback: function () {
+                async function onSuccess() {
+                    await supabase
+                        .from('subscriptions')
+                        .update({
+                            status: 'active',
+                            tier: selectedPlan.tier,
+                            is_trial: false,
+                            trial_start: null,
+                            trial_end: null,
+                        })
+                        .eq('business_id', businessId)
 
-                await fetchProfile(user.id)
-                onSubscribed?.()
+                    await fetchProfile(user.id)
+                    onSubscribed?.()
+                }
+                onSuccess()
             },
         })
 
@@ -125,7 +200,7 @@ export default function TrialExpiredModal({ businessId, onSubscribed }) {
         <>
             {/* Lock warning confirmation */}
             {showLockWarning && (
-                <div className="fixed inset-0 z-60 flex items-center justify-center px-4">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
                     <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 z-10">
                         <div className="text-center space-y-2">
@@ -170,9 +245,9 @@ export default function TrialExpiredModal({ businessId, onSubscribed }) {
                 <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl z-10 overflow-hidden">
 
                     {/* Top banner */}
-                    <div className="bg-linear-to-r from-blue-600 to-indigo-600 px-6 py-5 text-center">
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-center">
                         <p className="text-xs font-semibold text-blue-200 uppercase tracking-widest mb-1">Free Trial Ended</p>
-                        <h2 className="text-xl font-bold text-white">Your 14-day trial has expired</h2>
+                        <h2 className="text-xl font-bold text-white">Your {trialDays}-day trial has expired</h2>
                         <p className="text-sm text-blue-100 mt-1">
                             Choose a plan to keep using Vortex. Your data is safe and waiting.
                         </p>
@@ -184,7 +259,7 @@ export default function TrialExpiredModal({ businessId, onSubscribed }) {
                         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
                             <span className="text-xl">💡</span>
                             <p className="text-sm text-amber-800 leading-relaxed">
-                                During your trial you had access to the <span className="font-semibold">Scale plan</span> — unlimited orders, full reports, storefront link, delivery tracking and more. If you loved the experience, we recommend staying on Scale.
+                                During your trial you had access to the <span className="font-semibold">{trialTopPlan} plan</span> — the full feature set. If you loved the experience, we recommend staying on {trialTopPlan}.
                             </p>
                         </div>
 
@@ -215,7 +290,7 @@ export default function TrialExpiredModal({ businessId, onSubscribed }) {
 
                         {/* Plan cards */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            {VENDOR_PLANS.map(plan => {
+                            {ACTIVE_PLANS.map(plan => {
                                 const price = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
                                 const monthlyEquiv = billingInterval === 'yearly'
                                     ? Math.round(plan.yearlyPrice / 12).toLocaleString()

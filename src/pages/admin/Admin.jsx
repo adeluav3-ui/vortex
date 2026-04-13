@@ -85,7 +85,7 @@ export default function Admin() {
             </div>
 
             {/* Tabs */}
-            <div className="bg-gray-900 border-b border-gray-800 px-6 sticky top-[73px] z-10">
+            <div className="bg-gray-900 border-b border-gray-800 px-6 sticky top-18.25 z-10">
                 <div className="flex gap-1 overflow-x-auto scrollbar-hide">
                     {TABS.map(tab => (
                         <button

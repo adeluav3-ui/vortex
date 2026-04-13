@@ -10,8 +10,8 @@ const VENDOR_PLANS = [
         name: 'Solo',
         monthlyPrice: 4500,
         yearlyPrice: 45900,
-        monthlyCode: 'PLN_1dmcxfs006gtl6m',
-        yearlyCode: 'PLN_vp08jxmaekii6m8',
+        monthlyCode: 'PLN_d9m124pd092cpui',
+        yearlyCode: 'PLN_28h5ift57qbqwq3',
         features: ['100 orders/month', '1 user account', 'Up to 50 products', 'Order management', 'Logistics directory'],
     },
     {
@@ -19,8 +19,8 @@ const VENDOR_PLANS = [
         name: 'Hustle',
         monthlyPrice: 9500,
         yearlyPrice: 96900,
-        monthlyCode: 'PLN_jgfdsznt7qu4bwm',
-        yearlyCode: 'PLN_vz2eh4f9jvwr0dv',
+        monthlyCode: 'PLN_mrktco8sssbklsg',
+        yearlyCode: 'PLN_fi9rzzwohf7xrg1',
         badge: 'Most Popular',
         features: ['500 orders/month', '2 user accounts', 'Unlimited products', 'Payment tracking', 'Delivery tracker'],
     },
@@ -29,8 +29,8 @@ const VENDOR_PLANS = [
         name: 'Scale',
         monthlyPrice: 18000,
         yearlyPrice: 183600,
-        monthlyCode: 'PLN_zg2ndbq2x36flcx',
-        yearlyCode: 'PLN_izrkgoyv88a1pss',
+        monthlyCode: 'PLN_t8b1rhycyy53akc',
+        yearlyCode: 'PLN_93flwzwjsdn2sea',
         badge: 'Best Value',
         features: ['Unlimited orders', '5 user accounts', 'Unlimited products', 'Full reports & export', 'Storefront link'],
     },
@@ -120,7 +120,6 @@ export default function VendorSettings() {
             amount: amount * 100,
             plan: planCode,
             currency: 'NGN',
-            channels: ['card'],
             ref: `VTX-UPG-${profile.business_id.slice(0, 8)}-${Date.now()}`,
             metadata: {
                 business_id: profile.business_id,
@@ -301,7 +300,7 @@ export default function VendorSettings() {
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-sm font-semibold text-gray-900">
-                                {isTrialing ? 'Subscribe Now' : 'Change Plan'}
+                                {isTrialing ? 'Subscribe Now' : ['inactive', 'cancelled', 'past_due'].includes(profile?.subscription?.status) ? 'Activate a Plan' : 'Change Plan'}
                             </h3>
                             {/* Billing interval toggle */}
                             <div className="flex items-center gap-2">
@@ -324,7 +323,8 @@ export default function VendorSettings() {
                             {VENDOR_PLANS.map(plan => {
                                 const price = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
                                 const monthlyEquiv = billingInterval === 'yearly' ? Math.round(plan.yearlyPrice / 12).toLocaleString() : null
-                                const isCurrent = !isTrialing && tier === plan.tier
+                                const isCurrent = !isTrialing && tier === plan.tier && profile?.subscription?.status === 'active'
+                                const isInactiveState = ['inactive', 'cancelled', 'past_due'].includes(profile?.subscription?.status)
                                 const isScale = plan.tier === 'scale'
 
                                 return (
@@ -340,6 +340,11 @@ export default function VendorSettings() {
                                         {isCurrent && (
                                             <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs bg-green-500 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">
                                                 Current Plan
+                                            </span>
+                                        )}
+                                        {isInactiveState && tier === plan.tier && (
+                                            <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">
+                                                Previous Plan
                                             </span>
                                         )}
 
@@ -367,12 +372,12 @@ export default function VendorSettings() {
                                             disabled={subscribing || isCurrent}
                                             className={`w-full py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50 ${isCurrent
                                                 ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                                                : isScale || isTrialing
+                                                : isScale || isTrialing || isInactiveState
                                                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                                                     : 'bg-gray-900 text-white hover:bg-gray-700'
                                                 }`}
                                         >
-                                            {subscribing ? 'Opening...' : isCurrent ? '✓ Active' : isTrialing ? `Subscribe — ₦${price.toLocaleString()}` : `Switch to ${plan.name}`}
+                                            {subscribing ? 'Opening...' : isCurrent ? '✓ Active' : isTrialing ? `Subscribe — ₦${price.toLocaleString()}` : isInactiveState ? `Activate ${plan.name} — ₦${price.toLocaleString()}` : `Switch to ${plan.name}`}
                                         </button>
                                     </div>
                                 )
