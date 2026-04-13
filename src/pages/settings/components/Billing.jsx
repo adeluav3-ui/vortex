@@ -191,13 +191,11 @@ export default function Billing() {
     const mode = profile?.businesses?.mode
     const currentTier = subscription?.tier ?? 'starter'
 
-    console.log('Billing Debug:', {
-        mode: mode,
-        subscriptionTier: profile?.subscription?.tier,
-        subscriptionStatus: profile?.subscription?.status,
-        businessMode: profile?.businesses?.mode,
-        businessName: profile?.businesses?.name
-    })
+    // In Billing.jsx, right after the component starts
+    console.log('=== BILLING DEBUG ===')
+    console.log('Profile:', profile)
+    console.log('Business mode:', profile?.businesses?.mode)
+    console.log('Subscription:', profile?.subscription)
 
     // Determine which plans to show based on business mode
     let displayPlans = RETAIL_PLANS
