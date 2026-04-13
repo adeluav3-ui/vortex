@@ -55,7 +55,7 @@ serve(async (req) => {
       )
     }
 
-    const siteUrl = Deno.env.get('SITE_URL') ?? 'http://localhost:5173'
+    const siteUrl = Deno.env.get('SITE_URL') ?? 'https://vortex-uq9t.vercel.app'
 
     // The redirectTo URL is where Supabase sends the user AFTER they click the email link.
     // It must be in your Supabase Auth > URL Configuration > Redirect URLs allowlist.
