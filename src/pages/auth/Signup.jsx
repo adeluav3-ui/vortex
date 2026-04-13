@@ -18,26 +18,59 @@ export default function Signup() {
         setError('')
         setLoading(true)
 
-        // Create auth user - profile will be auto-created by trigger
-        const { data, error: signUpError } = await supabase.auth.signUp({
-            email: form.email,
-            password: form.password,
-            options: {
-                data: {
-                    full_name: form.full_name,
-                    role: 'owner'
+        try {
+            // Step 1: Create auth user
+            const { data, error: signUpError } = await supabase.auth.signUp({
+                email: form.email,
+                password: form.password,
+                options: {
+                    data: {
+                        full_name: form.full_name,
+                        role: 'owner'
+                    }
                 }
+            })
+
+            if (signUpError) {
+                console.error('Signup error:', signUpError)
+                setError(signUpError.message)
+                setLoading(false)
+                return
             }
-        })
 
-        if (signUpError) {
-            setError(signUpError.message)
+            if (!data?.user) {
+                setError('Failed to create account. Please try again.')
+                setLoading(false)
+                return
+            }
+
+            // Step 2: Create profile manually
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .insert({
+                    id: data.user.id,
+                    email: form.email,
+                    full_name: form.full_name,
+                    role: 'owner',
+                    is_active: true,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                })
+
+            if (profileError) {
+                console.error('Profile creation error:', profileError)
+                setError(profileError.message)
+                setLoading(false)
+                return
+            }
+
+            // Step 3: Redirect to onboarding
+            navigate('/onboarding')
+        } catch (err) {
+            console.error('Unexpected error:', err)
+            setError('An unexpected error occurred. Please try again.')
             setLoading(false)
-            return
         }
-
-        // Redirect to onboarding - profile is created automatically by the trigger
-        navigate('/onboarding')
     }
 
     return (
@@ -52,7 +85,11 @@ export default function Signup() {
                 <h1 className="text-2xl font-bold text-gray-900 mb-1">Create your account</h1>
                 <p className="text-sm text-gray-500 mb-6">Start managing your business with Vortex</p>
 
-                {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
+                {error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
+                        <p className="text-sm text-red-600">{error}</p>
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
