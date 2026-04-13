@@ -40,6 +40,9 @@ export default function ComboCustomers() {
                 .eq('business_id', profile.business_id)
                 .order('full_name')
 
+            console.log('All customers found:', customerData?.length)
+            console.log('Customer IDs:', customerData?.map(c => c.id))
+
             if (!customerData || customerData.length === 0) {
                 setCustomers([])
                 setLoading(false)
@@ -52,30 +55,35 @@ export default function ComboCustomers() {
             const { data: vendorOrdersData } = await supabase
                 .from('vendor_orders')
                 .select(`
-                    id, customer_id, order_number, total_amount, amount_paid, 
-                    balance_due, payment_status, status, created_at,
-                    order_items (
-                        id, product_name, variant_name, quantity, unit_price, subtotal
-                    )
-                `)
+                id, customer_id, order_number, total_amount, amount_paid, 
+                balance_due, payment_status, status, created_at,
+                order_items (
+                    id, product_name, variant_name, quantity, unit_price, subtotal
+                )
+            `)
                 .eq('business_id', profile.business_id)
                 .in('customer_id', customerIds)
                 .neq('status', 'cancelled')
                 .order('created_at', { ascending: false })
 
+            console.log('Vendor orders found:', vendorOrdersData?.length)
+
             // Fetch POS sales
             const { data: posSalesData } = await supabase
                 .from('sales')
                 .select(`
-                    id, customer_id, sale_number, total, payment_status, created_at,
-                    sale_items (
-                        id, product_name, variant_name, quantity, unit_price, subtotal
-                    )
-                `)
+                id, customer_id, sale_number, total, payment_status, created_at,
+                sale_items (
+                    id, product_name, variant_name, quantity, unit_price, subtotal
+                )
+            `)
                 .eq('business_id', profile.business_id)
                 .in('customer_id', customerIds)
                 .eq('status', 'completed')
                 .order('created_at', { ascending: false })
+
+            console.log('POS sales found:', posSalesData?.length)
+            console.log('POS sales data sample:', posSalesData?.slice(0, 2))
 
             // Fetch delivery costs for vendor orders
             const vendorOrderIds = (vendorOrdersData ?? []).map(o => o.id)

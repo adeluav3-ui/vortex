@@ -39,32 +39,49 @@ export default function CheckoutModal({ cart, subtotal, onClose, onSaleComplete 
 
             // Resolve or create customer
             let resolvedCustomerId = null
-            if (customerName.trim() || customerPhone.trim()) {
-                let customer = null
+            let customer = null
 
+            // Only try to create/find customer if name or phone is provided
+            if (customerName.trim() || customerPhone.trim()) {
+                // First, try to find by phone (most reliable)
                 if (customerPhone.trim()) {
                     const { data: existing } = await supabase
                         .from('customers')
-                        .select('id, outstanding_balance')
+                        .select('id, outstanding_balance, full_name')
                         .eq('business_id', profile.business_id)
                         .eq('phone', customerPhone.trim())
-                        .single()
+                        .maybeSingle()
                     customer = existing
                 }
 
+                // If not found by phone, try by name (for walk-in customers without phone)
+                if (!customer && customerName.trim()) {
+                    const { data: existing } = await supabase
+                        .from('customers')
+                        .select('id, outstanding_balance, full_name')
+                        .eq('business_id', profile.business_id)
+                        .eq('full_name', customerName.trim())
+                        .maybeSingle()
+                    customer = existing
+                }
+
+                // If still no customer, create new one
                 if (!customer) {
-                    const { data: newCustomer } = await supabase
+                    const { data: newCustomer, error: createError } = await supabase
                         .from('customers')
                         .insert({
                             business_id: profile.business_id,
                             branch_id: profile.branch_id,
-                            full_name: customerName.trim() || 'Unknown',
+                            full_name: customerName.trim() || 'Walk-in Customer',
                             phone: customerPhone.trim() || null,
                         })
                         .select()
                         .single()
+
+                    if (createError) throw createError
                     customer = newCustomer
-                } else if (customerName.trim()) {
+                } else if (customerName.trim() && customer.full_name !== customerName.trim()) {
+                    // Update name if it changed
                     await supabase
                         .from('customers')
                         .update({ full_name: customerName.trim() })
@@ -75,14 +92,17 @@ export default function CheckoutModal({ cart, subtotal, onClose, onSaleComplete 
 
                 // Update balance for credit
                 if (paymentMethod === 'credit' && customer) {
+                    const currentBalance = Number(customer.outstanding_balance) || 0
                     await supabase
                         .from('customers')
-                        .update({ outstanding_balance: Number(customer.outstanding_balance) + total })
+                        .update({ outstanding_balance: currentBalance + total })
                         .eq('id', customer.id)
                 }
             }
 
-            // Insert sale
+            console.log('Customer resolved:', { resolvedCustomerId, customerName, customerPhone })
+
+            // Insert sale with customer_id
             const { data: sale, error: saleError } = await supabase
                 .from('sales')
                 .insert({
@@ -98,15 +118,18 @@ export default function CheckoutModal({ cart, subtotal, onClose, onSaleComplete 
                     change_given: change,
                     payment_method: paymentMethod,
                     status: 'completed',
-                    note,
+                    note: note.trim() || null,
+                    created_at: new Date().toISOString(),
                 })
                 .select()
                 .single()
+
             if (saleError) throw saleError
+
+            console.log('Sale created with customer_id:', sale.customer_id)
 
             // Insert sale items + deduct stock
             for (const item of cart) {
-                // Inside the "for (const item of cart)" loop, replace the sale_items insert:
                 await supabase.from('sale_items').insert({
                     sale_id: sale.id,
                     variant_id: item.variant_id,
@@ -152,6 +175,7 @@ export default function CheckoutModal({ cart, subtotal, onClose, onSaleComplete 
 
             onSaleComplete(fullSale)
         } catch (err) {
+            console.error('Checkout error:', err)
             setError(err.message)
         } finally {
             setLoading(false)
