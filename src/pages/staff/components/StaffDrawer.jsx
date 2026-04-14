@@ -17,6 +17,7 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
     const [periodStart, setPeriodStart] = useState('')
     const [periodEnd, setPeriodEnd] = useState('')
     const [payNote, setPayNote] = useState('')
+    const [payMethod, setPayMethod] = useState('transfer')
     const [payLoading, setPayLoading] = useState(false)
     const [payError, setPayError] = useState('')
     const [activeTab, setActiveTab] = useState('details')
@@ -35,7 +36,15 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
         setLoading(true)
         const { data } = await supabase
             .from('salary_payments')
-            .select('*')
+            .select(`
+                *,
+                expenses!left (
+                    id,
+                    description,
+                    expense_date,
+                    payment_method
+                )
+            `)
             .eq('staff_id', staff.id)
             .order('created_at', { ascending: false })
         setPayments(data ?? [])
@@ -47,10 +56,42 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
         const amount = Number(payAmount)
         if (!amount || amount <= 0) return setPayError('Enter a valid amount')
         if (!periodStart || !periodEnd) return setPayError('Select a payment period')
+
+        // Check if already paid for this period
+        const existingPayment = payments.find(p => {
+            const existingStart = new Date(p.period_start).toISOString().split('T')[0]
+            const existingEnd = new Date(p.period_end).toISOString().split('T')[0]
+            return existingStart === periodStart && existingEnd === periodEnd && p.status === 'paid'
+        })
+
+        if (existingPayment) {
+            return setPayError(`Salary for this period has already been paid on ${new Date(existingPayment.created_at).toLocaleDateString()}`)
+        }
+
         setPayLoading(true)
 
         try {
-            const { error } = await supabase
+            // Step 1: Create expense record
+            const expenseDescription = `Salary payment - ${staff.full_name} - ${new Date(periodStart).toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })}`
+
+            const { data: expenseData, error: expenseError } = await supabase
+                .from('expenses')
+                .insert({
+                    business_id: profile.business_id,
+                    branch_id: staff.branch_id || profile.branch_id,
+                    expense_date: new Date().toISOString().split('T')[0],
+                    description: expenseDescription,
+                    amount: amount,
+                    payment_method: payMethod,
+                    receipt_url: null,
+                })
+                .select()
+                .single()
+
+            if (expenseError) throw new Error(`Failed to create expense: ${expenseError.message}`)
+
+            // Step 2: Create salary payment record linked to expense
+            const { error: salaryError } = await supabase
                 .from('salary_payments')
                 .insert({
                     business_id: profile.business_id,
@@ -61,12 +102,20 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
                     period_end: periodEnd,
                     status: 'paid',
                     note: payNote.trim() || null,
+                    expense_id: expenseData.id,
                 })
-            if (error) throw error
 
+            if (salaryError) throw new Error(`Failed to record salary payment: ${salaryError.message}`)
+
+            // Clear form and refresh
             setPayNote('')
+            setPayAmount(staff.salary?.toString() ?? '')
+            setPayMethod('transfer')
             fetchPayments()
             onPaymentRecorded()
+
+            // Show success feedback
+            setPayError('')
         } catch (err) {
             setPayError(err.message)
         } finally {
@@ -138,8 +187,8 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
                             key={tab}
                             onClick={() => setActiveTab(tab)}
                             className={`py-3 px-4 text-sm font-medium border-b-2 transition capitalize ${activeTab === tab
-                                    ? 'border-blue-600 text-blue-600'
-                                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                                ? 'border-blue-600 text-blue-600'
+                                : 'border-transparent text-gray-400 hover:text-gray-600'
                                 }`}
                         >
                             {tab === 'salary' ? `Salary History (${payments.length})` : 'Details'}
@@ -212,6 +261,18 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
                                             />
                                         </div>
                                     </div>
+                                    <div>
+                                        <label className="block text-xs text-green-600 mb-1">Payment Method</label>
+                                        <select
+                                            value={payMethod}
+                                            onChange={e => setPayMethod(e.target.value)}
+                                            className="w-full border border-green-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
+                                        >
+                                            <option value="cash">Cash</option>
+                                            <option value="transfer">Bank Transfer</option>
+                                            <option value="card">Card</option>
+                                        </select>
+                                    </div>
                                     <input
                                         value={payNote}
                                         onChange={e => setPayNote(e.target.value)}
@@ -246,9 +307,21 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
                                                 {new Date(p.period_end).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
                                             </p>
                                             {p.note && <p className="text-xs text-gray-400 italic mt-0.5">{p.note}</p>}
-                                            <p className="text-xs text-gray-300 mt-0.5">
-                                                Recorded {new Date(p.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                            </p>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                <p className="text-xs text-gray-300">
+                                                    Recorded {new Date(p.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </p>
+                                                {p.expenses && (
+                                                    <span className="text-xs text-blue-400">
+                                                        • Expense recorded
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {p.expenses && (
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    Payment method: {p.expenses.payment_method}
+                                                </p>
+                                            )}
                                         </div>
                                     ))
                                 )}
