@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import ModeSwitcher from './ModeSwitcher'
+import HelpModal from './HelpModal'
 
 const RETAIL_NAV_ITEMS = [
     { path: '/dashboard', label: 'Dashboard', icon: '🏠', module: 'dashboard' },
@@ -38,6 +39,7 @@ export default function Sidebar() {
     const { profile, signOut, hasAccess } = useAuth()
     const [mobileOpen, setMobileOpen] = useState(false)
     const location = useLocation()
+    const [showHelp, setShowHelp] = useState(false)
 
     const isVendor = profile?.businesses?.mode === 'online_vendor'
     const isCombo = profile?.businesses?.mode === 'combo'
@@ -145,7 +147,15 @@ export default function Sidebar() {
                     </NavLink>
                 </div>
             )}
-
+            {/* Help button */}
+            <div className="px-3 py-2 border-t border-gray-700">
+                <button
+                    onClick={() => setShowHelp(true)}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800 hover:text-white transition"
+                >
+                    <span>❓</span> Help & Tutorials
+                </button>
+            </div>
             {/* User + sign out */}
             <div className="px-3 py-4 border-t border-gray-700">
                 <div className="flex items-center gap-3 px-3 py-2 mb-1">
@@ -188,6 +198,11 @@ export default function Sidebar() {
                     </div>
                 </>
             )}
+            <HelpModal
+                isOpen={showHelp}
+                onClose={() => setShowHelp(false)}
+                businessMode={profile?.businesses?.mode}
+            />
         </>
     )
 }
