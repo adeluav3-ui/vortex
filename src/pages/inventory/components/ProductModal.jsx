@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 
@@ -10,12 +10,16 @@ export default function ProductModal({ product, onClose, onSaved }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [activeTab, setActiveTab] = useState('details')
+    const [imageFile, setImageFile] = useState(null)
+    const [imagePreview, setImagePreview] = useState(product?.image_url ?? null)
+    const fileInputRef = useRef()
 
     const [form, setForm] = useState({
         name: product?.name ?? '',
         description: product?.description ?? '',
         category_id: product?.category_id ?? '',
         unit: product?.unit ?? 'piece',
+        image_url: product?.image_url ?? '',
     })
 
     const [variants, setVariants] = useState(
@@ -38,6 +42,13 @@ export default function ProductModal({ product, onClose, onSaved }) {
             .eq('business_id', profile.business_id)
             .then(({ data }) => setCategories(data ?? []))
     }, [])
+
+    function handleImageChange(e) {
+        const file = e.target.files[0]
+        if (!file) return
+        setImageFile(file)
+        setImagePreview(URL.createObjectURL(file))
+    }
 
     function handleChange(e) {
         setForm({ ...form, [e.target.name]: e.target.value })
@@ -66,24 +77,42 @@ export default function ProductModal({ product, onClose, onSaved }) {
         setLoading(true)
 
         try {
+            let image_url = form.image_url
+
+            // Upload image if new file selected
+            if (imageFile) {
+                const ext = imageFile.name.split('.').pop()
+                const path = `${profile.business_id}/${Date.now()}.${ext}`
+                const { error: uploadError } = await supabase.storage
+                    .from('product-images')
+                    .upload(path, imageFile, { upsert: true })
+                if (uploadError) throw uploadError
+                const { data: urlData } = supabase.storage
+                    .from('product-images')
+                    .getPublicUrl(path)
+                image_url = urlData.publicUrl
+            }
+
             let productId = product?.id
 
             if (product) {
-                // Update product
+                // Update product with image
                 await supabase.from('products').update({
                     name: form.name,
                     description: form.description,
                     category_id: form.category_id || null,
                     unit: form.unit,
+                    image_url: image_url,
                 }).eq('id', productId)
             } else {
-                // Insert product
+                // Insert product with image
                 const { data, error: pErr } = await supabase.from('products').insert({
                     business_id: profile.business_id,
                     name: form.name,
                     description: form.description,
                     category_id: form.category_id || null,
                     unit: form.unit,
+                    image_url: image_url,
                 }).select().single()
                 if (pErr) throw pErr
                 productId = data.id
@@ -113,7 +142,7 @@ export default function ProductModal({ product, onClose, onSaved }) {
                     variantId = data.id
                 }
 
-                // Upsert stock level — replace the entire if/else block
+                // Upsert stock level
                 await supabase.from('stock_levels')
                     .upsert({
                         business_id: profile.business_id,
@@ -167,6 +196,47 @@ export default function ProductModal({ product, onClose, onSaved }) {
 
                     {activeTab === 'details' && (
                         <div className="space-y-4">
+                            {/* Image upload section - NEW */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
+                                <div className="flex items-center gap-4">
+                                    <div
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 cursor-pointer hover:border-blue-400 transition shrink-0"
+                                    >
+                                        {imagePreview ? (
+                                            <img src={imagePreview} alt="preview" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-2xl">📷</span>
+                                        )}
+                                    </div>
+                                    <div className="space-y-1">
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="text-sm text-blue-600 font-medium hover:underline block"
+                                        >
+                                            {imagePreview ? 'Change image' : 'Upload image'}
+                                        </button>
+                                        {imagePreview && (
+                                            <button
+                                                onClick={() => { setImageFile(null); setImagePreview(null); setForm({ ...form, image_url: '' }) }}
+                                                className="text-xs text-red-400 hover:text-red-600 block"
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
+                                        <p className="text-xs text-gray-400">JPG, PNG — max 2MB</p>
+                                    </div>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageChange}
+                                        className="hidden"
+                                    />
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
                                 <input
