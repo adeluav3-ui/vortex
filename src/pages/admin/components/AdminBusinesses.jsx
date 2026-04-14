@@ -35,7 +35,7 @@ const MODE_NAMES = {
 }
 
 export default function AdminBusinesses() {
-    [businesses, setBusinesses] = useState([])
+    const [businesses, setBusinesses] = useState([])  // ← FIXED: added 'const'
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [search, setSearch] = useState('')
@@ -84,7 +84,7 @@ export default function AdminBusinesses() {
             // Get profiles (users) for each business
             const { data: profilesData, error: profileError } = await supabase
                 .from('profiles')
-                .select('business_id, full_name, role')
+                .select('business_id, full_name, role, email')
                 .in('business_id', businessIds)
 
             if (profileError) throw profileError
