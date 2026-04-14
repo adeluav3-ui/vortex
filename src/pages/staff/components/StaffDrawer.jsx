@@ -17,13 +17,14 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
     const [periodStart, setPeriodStart] = useState('')
     const [periodEnd, setPeriodEnd] = useState('')
     const [payNote, setPayNote] = useState('')
-    const [payMethod, setPayMethod] = useState('transfer')
     const [payLoading, setPayLoading] = useState(false)
     const [payError, setPayError] = useState('')
     const [activeTab, setActiveTab] = useState('details')
+    const [expenseCategories, setExpenseCategories] = useState([])
 
     useEffect(() => {
         fetchPayments()
+        fetchExpenseCategories()
         // Default period to current month
         const now = new Date()
         const start = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -31,6 +32,35 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
         setPeriodStart(start.toISOString().split('T')[0])
         setPeriodEnd(end.toISOString().split('T')[0])
     }, [staff.id])
+
+    async function fetchExpenseCategories() {
+        // Get or create a "Salary" expense category
+        let { data: category } = await supabase
+            .from('expense_categories')
+            .select('id')
+            .eq('business_id', profile.business_id)
+            .eq('name', 'Salary')
+            .maybeSingle()
+
+        if (!category) {
+            // Create Salary category if it doesn't exist
+            const { data: newCategory, error } = await supabase
+                .from('expense_categories')
+                .insert({
+                    business_id: profile.business_id,
+                    name: 'Salary',
+                    description: 'Staff salary payments'
+                })
+                .select()
+                .single()
+
+            if (!error && newCategory) {
+                category = newCategory
+            }
+        }
+
+        setExpenseCategories(category ? [category] : [])
+    }
 
     async function fetchPayments() {
         setLoading(true)
@@ -40,9 +70,10 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
                 *,
                 expenses!left (
                     id,
-                    description,
+                    title,
                     expense_date,
-                    payment_method
+                    amount,
+                    note
                 )
             `)
             .eq('staff_id', staff.id)
@@ -71,18 +102,44 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
         setPayLoading(true)
 
         try {
+            // Get or create Salary category
+            let categoryId = null
+            const { data: category } = await supabase
+                .from('expense_categories')
+                .select('id')
+                .eq('business_id', profile.business_id)
+                .eq('name', 'Salary')
+                .maybeSingle()
+
+            if (category) {
+                categoryId = category.id
+            } else {
+                const { data: newCategory } = await supabase
+                    .from('expense_categories')
+                    .insert({
+                        business_id: profile.business_id,
+                        name: 'Salary',
+                        description: 'Staff salary payments'
+                    })
+                    .select()
+                    .single()
+                if (newCategory) categoryId = newCategory.id
+            }
+
             // Step 1: Create expense record
-            const expenseDescription = `Salary payment - ${staff.full_name} - ${new Date(periodStart).toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })}`
+            const expenseTitle = `Salary - ${staff.full_name} - ${new Date(periodStart).toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })}`
 
             const { data: expenseData, error: expenseError } = await supabase
                 .from('expenses')
                 .insert({
                     business_id: profile.business_id,
                     branch_id: staff.branch_id || profile.branch_id,
-                    expense_date: new Date().toISOString().split('T')[0],
-                    description: expenseDescription,
+                    user_id: user.id,
+                    category_id: categoryId,
+                    title: expenseTitle,
                     amount: amount,
-                    payment_method: payMethod,
+                    note: payNote.trim() || `Salary payment for ${staff.full_name} (${new Date(periodStart).toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })})`,
+                    expense_date: new Date().toISOString().split('T')[0],
                     receipt_url: null,
                 })
                 .select()
@@ -110,7 +167,6 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
             // Clear form and refresh
             setPayNote('')
             setPayAmount(staff.salary?.toString() ?? '')
-            setPayMethod('transfer')
             fetchPayments()
             onPaymentRecorded()
 
@@ -261,18 +317,6 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
                                             />
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs text-green-600 mb-1">Payment Method</label>
-                                        <select
-                                            value={payMethod}
-                                            onChange={e => setPayMethod(e.target.value)}
-                                            className="w-full border border-green-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
-                                        >
-                                            <option value="cash">Cash</option>
-                                            <option value="transfer">Bank Transfer</option>
-                                            <option value="card">Card</option>
-                                        </select>
-                                    </div>
                                     <input
                                         value={payNote}
                                         onChange={e => setPayNote(e.target.value)}
@@ -286,6 +330,9 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
                                     >
                                         {payLoading ? 'Recording...' : 'Record Payment'}
                                     </button>
+                                    <p className="text-xs text-green-600 text-center mt-2">
+                                        💰 This will automatically add to Expenses under "Salary" category
+                                    </p>
                                 </div>
                             </div>
 
@@ -319,7 +366,7 @@ export default function StaffDrawer({ staff, onClose, onEdit, onPaymentRecorded 
                                             </div>
                                             {p.expenses && (
                                                 <p className="text-xs text-gray-400 mt-1">
-                                                    Payment method: {p.expenses.payment_method}
+                                                    Expense: {p.expenses.title}
                                                 </p>
                                             )}
                                         </div>
