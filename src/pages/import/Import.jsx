@@ -160,7 +160,14 @@ export default function Import() {
     const isVendor = profile?.businesses?.mode === 'online_vendor'
 
     const availableTypes = Object.entries(TEMPLATES)
-        .filter(([, tmpl]) => tmpl.modes.includes(isVendor ? 'online_vendor' : 'retail'))
+        .filter(([, tmpl]) => {
+            if (isCombo) {
+                // Combo users get both retail AND vendor import types
+                return tmpl.modes.includes('retail') || tmpl.modes.includes('online_vendor')
+            }
+            // Regular retail or vendor users get their respective types
+            return tmpl.modes.includes(isVendor ? 'online_vendor' : 'retail')
+        })
         .map(([key, tmpl]) => ({ key, ...tmpl }))
 
     const [activeType, setActiveType] = useState(availableTypes[0]?.key ?? 'products')
