@@ -11,9 +11,16 @@ const ROLE_COLORS = {
 
 export default function AdminUsers() {
     const [users, setUsers] = useState([])
+    const [businessesWithoutOwnersList, setBusinessesWithoutOwnersList] = useState([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
-    const [stats, setStats] = useState({ totalAuthUsers: 0, totalProfiles: 0, orphanedAuthUsers: 0 })
+    const [stats, setStats] = useState({
+        totalProfiles: 0,
+        totalBusinesses: 0,
+        businessesWithoutOwners: 0,
+        totalStaff: 0,
+        orphanedOwners: 0
+    })
 
     useEffect(() => { fetchAllUsers() }, [])
 
@@ -21,20 +28,17 @@ export default function AdminUsers() {
         setLoading(true)
 
         try {
-            // Method 1: Get all auth users via admin API (requires service role)
-            // Since you might not have this, let's use a different approach
-
-            // Get all profiles
+            // Fetch all profiles WITHOUT trying to join businesses directly
             const { data: profiles, error: profilesError } = await supabase
                 .from('profiles')
-                .select('*, businesses(name, mode)')
+                .select('*')
                 .order('created_at', { ascending: false })
 
             if (profilesError) {
                 console.error('Error fetching profiles:', profilesError)
             }
 
-            // Also get all businesses to see which ones don't have owners
+            // Get all businesses separately
             const { data: businesses } = await supabase
                 .from('businesses')
                 .select('id, name, mode, created_at')
@@ -43,9 +47,15 @@ export default function AdminUsers() {
             // Get all staff records
             const { data: staffRecords } = await supabase
                 .from('staff')
-                .select('*, businesses(name)')
+                .select('*')
 
-            // Create a map of business_id to owner
+            // Create maps for quick lookup
+            const businessesMap = {}
+            businesses?.forEach(biz => {
+                businessesMap[biz.id] = biz
+            })
+
+            // Create a map of business_id to owner profile
             const businessOwners = {}
             profiles?.forEach(profile => {
                 if (profile.business_id && (profile.role === 'owner' || profile.role === 'super_admin')) {
@@ -56,17 +66,19 @@ export default function AdminUsers() {
             })
 
             // Find businesses without owners
-            const businessesWithoutOwners = businesses?.filter(b => !businessOwners[b.id]) || []
+            const businessesWithoutOwners = businesses?.filter(biz => !businessOwners[biz.id]) || []
 
-            // Enrich profiles with additional info
+            // Enrich profiles with business data
             const enrichedUsers = profiles?.map(profile => ({
                 ...profile,
-                hasBusiness: !!profile.businesses,
-                businessMode: profile.businesses?.mode,
-                isOwnerOrphan: profile.role === 'owner' && !profile.businesses
+                businesses: profile.business_id ? businessesMap[profile.business_id] : null,
+                hasBusiness: !!profile.business_id && !!businessesMap[profile.business_id],
+                businessMode: businessesMap[profile.business_id]?.mode,
+                isOwnerOrphan: profile.role === 'owner' && !businessesMap[profile.business_id]
             })) || []
 
             setUsers(enrichedUsers)
+            setBusinessesWithoutOwnersList(businessesWithoutOwners)
             setStats({
                 totalProfiles: profiles?.length || 0,
                 totalBusinesses: businesses?.length || 0,
@@ -126,7 +138,7 @@ export default function AdminUsers() {
                 <div className="mb-4 bg-yellow-900/30 border border-yellow-700 rounded-xl p-4">
                     <p className="text-sm text-yellow-400 font-medium mb-2">⚠️ Businesses without an owner profile:</p>
                     <div className="space-y-1">
-                        {businessesWithoutOwners.slice(0, 5).map(b => (
+                        {businessesWithoutOwnersList.slice(0, 5).map(b => (
                             <p key={b.id} className="text-xs text-yellow-300">• {b.name} (created: {new Date(b.created_at).toLocaleDateString()})</p>
                         ))}
                         {stats.businessesWithoutOwners > 5 && (
