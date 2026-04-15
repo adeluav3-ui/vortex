@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPlanLimits, canAccess } from '../lib/planLimits'
@@ -89,19 +88,53 @@ export function AuthProvider({ children }) {
         return getPlanLimits(tier)[feature]
     }
 
-    function hasAccess(module) {
+    // New function: Combo-aware module access
+    function canAccessModule(module, dashboardView = null) {
         const role = profile?.role
+        const businessMode = profile?.businesses?.mode
+        const view = dashboardView || profile?.dashboard_view || 'retail'
+
         if (!role) return false
 
-        const permissions = {
-            super_admin: ['dashboard', 'sales', 'inventory', 'expenses', 'customers', 'staff', 'reports', 'settings', 'import'],
-            owner: ['dashboard', 'sales', 'inventory', 'expenses', 'customers', 'staff', 'reports', 'settings', 'import'],
-            manager: ['dashboard', 'sales', 'inventory', 'expenses', 'customers', 'staff', 'reports', 'settings', 'import'],
-            staff: ['dashboard', 'sales', 'inventory'],
-            cashier: ['dashboard', 'sales'],
+        // Super admin and owner have full access
+        if (role === 'super_admin' || role === 'owner') return true
+
+        // Manager has same as owner for now
+        if (role === 'manager') return true
+
+        // Staff and cashier permissions
+        if (role === 'staff' || role === 'cashier') {
+            // For combo mode, permissions depend on current view
+            if (businessMode === 'combo') {
+                if (view === 'retail') {
+                    // Retail view permissions for combo staff
+                    const retailStaffModules = ['dashboard', 'sales', 'inventory', 'customers', 'import']
+                    return retailStaffModules.includes(module)
+                } else if (view === 'vendor') {
+                    // Vendor view permissions for combo staff
+                    const vendorStaffModules = ['dashboard', 'orders', 'inventory', 'payments', 'invoices', 'delivery', 'customers', 'storefront', 'import']
+                    return vendorStaffModules.includes(module)
+                }
+            }
+
+            // For non-combo modes (pure retail or pure vendor)
+            if (businessMode === 'online_vendor') {
+                // Vendor mode staff permissions
+                const vendorStaffModules = ['dashboard', 'orders', 'inventory', 'payments', 'invoices', 'delivery', 'customers', 'storefront', 'import']
+                return vendorStaffModules.includes(module)
+            } else {
+                // Retail mode staff permissions (default)
+                const retailStaffModules = ['dashboard', 'sales', 'inventory', 'customers', 'import']
+                return retailStaffModules.includes(module)
+            }
         }
 
-        return permissions[role]?.includes(module) ?? false
+        return false
+    }
+
+    // Updated hasAccess that uses canAccessModule
+    function hasAccess(module) {
+        return canAccessModule(module, profile?.dashboard_view)
     }
 
     return (
@@ -112,6 +145,7 @@ export function AuthProvider({ children }) {
             signOut,
             fetchProfile,
             hasAccess,
+            canAccessModule,
             getPlan,
             planCan,
             planLimit

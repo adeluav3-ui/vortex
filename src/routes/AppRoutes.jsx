@@ -23,7 +23,7 @@ import Payments from '../pages/payments/Payments'
 import PublicStorefront from '../pages/storefront/PublicStorefront'
 import Storefront from '../pages/storefront/Storefront'
 import Invoices from '../pages/invoices/Invoices'
-import InvoiceDetail from '../pages/invoices/InvoiceDetail'
+import InvoiceDetail from '../pages/invoice/InvoiceDetail'
 import Import from '../pages/import/Import'
 import AuditLogs from '../pages/audit-logs/AuditLogs'
 import WaitingList from '../pages/WaitingList'
@@ -66,6 +66,39 @@ function RoleRoute({ children, module }) {
     return children
 }
 
+// Combo-aware route protection for staff
+function ComboStaffRoute({ children, module }) {
+    const { user, profile, loading, canAccessModule } = useAuth()
+    const dashboardView = profile?.dashboard_view || 'retail'
+
+    if (loading) return <div className="flex items-center justify-center h-screen text-gray-500 text-sm">Loading...</div>
+    if (!user) return <Navigate to="/login" />
+
+    // Super admin, owner, manager bypass
+    if (profile?.role === 'super_admin' || profile?.role === 'owner' || profile?.role === 'manager') {
+        return children
+    }
+
+    // For staff/cashier in combo mode
+    if (profile?.businesses?.mode === 'combo') {
+        if (canAccessModule(module, dashboardView)) {
+            return children
+        }
+        return (
+            <PageWrapper title="Access Denied">
+                <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
+                    <p className="text-4xl mb-3">🔒</p>
+                    <p className="text-gray-900 font-semibold mb-1">Access Restricted</p>
+                    <p className="text-sm text-gray-500">You don't have permission to view this page.</p>
+                </div>
+            </PageWrapper>
+        )
+    }
+
+    // For non-combo, use regular role check
+    return <RoleRoute module={module}>{children}</RoleRoute>
+}
+
 function OnboardingGuard({ children }) {
     const { user, profile, loading } = useAuth()
     if (loading) return <div className="flex items-center justify-center h-screen text-gray-500 text-sm">Loading...</div>
@@ -73,19 +106,6 @@ function OnboardingGuard({ children }) {
     if (profile?.business_id) return <Navigate to="/dashboard" />
     return children
 }
-
-/**
- * VendorRoute — guards vendor-only pages with optional plan feature check.
- *
- * - No `feature` prop → just requires auth (all vendor tiers pass)
- * - With `feature` prop → checks vendorCanAccess(tier, feature, status)
- *   so trialing vendors always get full Scale access
- *
- * Feature → Min tier reference:
- *   orders, inventory, customers, invoices, importData  → all tiers (no gate)
- *   paymentsPage, reports, fullReports                  → Hustle+
- *   storefront, csvExport                               → Scale only
- */
 function VendorRoute({ children, feature }) {
     const { user, profile, loading } = useAuth()
     const navigate = useNavigate()
@@ -161,21 +181,44 @@ export default function AppRoutes() {
             <Route path="/sales" element={<RoleRoute module="sales"><Sales /></RoleRoute>} />
             <Route path="/inventory" element={<RoleRoute module="inventory"><Inventory /></RoleRoute>} />
             <Route path="/expenses" element={<RoleRoute module="expenses"><Expenses /></RoleRoute>} />
-            <Route path="/customers" element={<RoleRoute module="customers"><Customers /></RoleRoute>} />
             <Route path="/staff" element={<RoleRoute module="staff"><Staff /></RoleRoute>} />
             <Route path="/reports" element={<RoleRoute module="reports"><Reports /></RoleRoute>} />
             <Route path="/settings" element={<RoleRoute module="dashboard"><Settings /></RoleRoute>} />
             <Route path="/settings/billing" element={<RoleRoute module="dashboard"><Settings /></RoleRoute>} />
-            <Route path="/import" element={<RoleRoute module="import"><Import /></RoleRoute>} />
             <Route path="/audit-logs" element={<RoleRoute module="reports"><AuditLogs /></RoleRoute>} />
+
+            {/* ── Combo-aware routes (customers, payments, invoices, delivery, storefront, import) ── */}
+            <Route path="/customers" element={
+                <ComboStaffRoute module="customers">
+                    <Customers />
+                </ComboStaffRoute>
+            } />
+
+            <Route path="/import" element={
+                <ComboStaffRoute module="import">
+                    <Import />
+                </ComboStaffRoute>
+            } />
 
             {/* ── Vendor — all tiers (no plan gate) ── */}
             <Route path="/orders" element={<VendorRoute><Orders /></VendorRoute>} />
             <Route path="/orders/new" element={<VendorRoute><NewOrder /></VendorRoute>} />
             <Route path="/orders/:id" element={<VendorRoute><OrderDetail /></VendorRoute>} />
-            <Route path="/invoices" element={<VendorRoute><Invoices /></VendorRoute>} />
-            <Route path="/invoices/:id" element={<VendorRoute><InvoiceDetail /></VendorRoute>} />
-            <Route path="/delivery" element={<VendorRoute><DeliveryHub /></VendorRoute>} />
+            <Route path="/delivery" element={
+                <ComboStaffRoute module="delivery">
+                    <VendorRoute><DeliveryHub /></VendorRoute>
+                </ComboStaffRoute>
+            } />
+            <Route path="/invoices" element={
+                <ComboStaffRoute module="invoices">
+                    <VendorRoute><Invoices /></VendorRoute>
+                </ComboStaffRoute>
+            } />
+            <Route path="/invoices/:id" element={
+                <ComboStaffRoute module="invoices">
+                    <VendorRoute><InvoiceDetail /></VendorRoute>
+                </ComboStaffRoute>
+            } />
 
             {/* Inventory and Import are available to all vendor tiers.
                 No feature gate needed — VendorInventory enforces product limits internally. */}
@@ -183,7 +226,9 @@ export default function AppRoutes() {
 
             {/* ── Vendor — Hustle+ ── */}
             <Route path="/payments" element={
-                <VendorRoute feature="paymentsPage"><Payments /></VendorRoute>
+                <ComboStaffRoute module="payments">
+                    <VendorRoute feature="paymentsPage"><Payments /></VendorRoute>
+                </ComboStaffRoute>
             } />
             <Route path="/reports" element={
                 <VendorRoute feature="reports"><Reports /></VendorRoute>
@@ -191,7 +236,9 @@ export default function AppRoutes() {
 
             {/* ── Vendor — Scale only ── */}
             <Route path="/storefront" element={
-                <VendorRoute feature="storefront"><Storefront /></VendorRoute>
+                <ComboStaffRoute module="storefront">
+                    <VendorRoute feature="storefront"><Storefront /></VendorRoute>
+                </ComboStaffRoute>
             } />
 
             {/* ── Fallback ── */}

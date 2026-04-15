@@ -19,24 +19,24 @@ const RETAIL_NAV_ITEMS = [
 ]
 
 const VENDOR_NAV_ITEMS = [
-    { path: '/dashboard', label: 'Dashboard', icon: '🏠' },
-    { path: '/orders', label: 'Orders', icon: '🛍️' },
-    { path: '/inventory', label: 'Products', icon: '📦' },
-    { path: '/payments', label: 'Payments', icon: '💳' },
-    { path: '/invoices', label: 'Invoices', icon: '🧾' },
-    { path: '/delivery', label: 'Delivery Hub', icon: '🚚' },
-    { path: '/customers', label: 'Customers', icon: '👥' },
-    { path: '/reports', label: 'Reports', icon: '📊' },
-    { path: '/storefront', label: 'Storefront', icon: '🌐' },
-    { path: '/import', label: 'Import Data', icon: '📥' },
-    { path: '/settings', label: 'Settings', icon: '⚙️' },
+    { path: '/dashboard', label: 'Dashboard', icon: '🏠', module: 'dashboard' },
+    { path: '/orders', label: 'Orders', icon: '🛍️', module: 'orders' },
+    { path: '/inventory', label: 'Products', icon: '📦', module: 'inventory' },
+    { path: '/payments', label: 'Payments', icon: '💳', module: 'payments' },
+    { path: '/invoices', label: 'Invoices', icon: '🧾', module: 'invoices' },
+    { path: '/delivery', label: 'Delivery Hub', icon: '🚚', module: 'delivery' },
+    { path: '/customers', label: 'Customers', icon: '👥', module: 'customers' },
+    { path: '/reports', label: 'Reports', icon: '📊', module: 'reports' },
+    { path: '/storefront', label: 'Storefront', icon: '🌐', module: 'storefront' },
+    { path: '/import', label: 'Import Data', icon: '📥', module: 'import' },
+    { path: '/settings', label: 'Settings', icon: '⚙️', module: 'settings' },
 ]
 
 // Exported so Navbar can use it to trigger open
 export let openSidebar = () => { }
 
 export default function Sidebar() {
-    const { profile, signOut, hasAccess } = useAuth()
+    const { profile, signOut, hasAccess, canAccessModule } = useAuth()
     const [mobileOpen, setMobileOpen] = useState(false)
     const location = useLocation()
     const [showHelp, setShowHelp] = useState(false)
@@ -44,13 +44,33 @@ export default function Sidebar() {
     const isVendor = profile?.businesses?.mode === 'online_vendor'
     const isCombo = profile?.businesses?.mode === 'combo'
     const dashboardView = profile?.dashboard_view || 'retail'
+    const role = profile?.role
 
-    // For combo users, show nav items based on current view
-    let navItems
+    // Determine which nav items to show based on mode and permissions
+    let filteredNavItems = []
+
     if (isCombo) {
-        navItems = dashboardView === 'retail' ? RETAIL_NAV_ITEMS : VENDOR_NAV_ITEMS
+        const baseItems = dashboardView === 'retail' ? RETAIL_NAV_ITEMS : VENDOR_NAV_ITEMS
+
+        // For owner/manager/super_admin, show all items
+        if (role === 'owner' || role === 'manager' || role === 'super_admin') {
+            filteredNavItems = baseItems
+        } else {
+            // For staff/cashier, filter based on current view permissions
+            filteredNavItems = baseItems.filter(item => {
+                return canAccessModule(item.module, dashboardView)
+            })
+        }
     } else {
-        navItems = isVendor ? VENDOR_NAV_ITEMS : RETAIL_NAV_ITEMS
+        const baseItems = isVendor ? VENDOR_NAV_ITEMS : RETAIL_NAV_ITEMS
+
+        // For owner/manager/super_admin, show all items
+        if (role === 'owner' || role === 'manager' || role === 'super_admin') {
+            filteredNavItems = baseItems
+        } else {
+            // For staff/cashier, use hasAccess
+            filteredNavItems = baseItems.filter(item => hasAccess(item.module))
+        }
     }
 
     // Register open function so Navbar can call it
@@ -111,24 +131,22 @@ export default function Sidebar() {
 
             {/* Nav items */}
             <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-                {navItems
-                    .filter(item => (isCombo || isVendor) ? true : hasAccess(item.module))
-                    .map((item) => (
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            end={item.path === '/dashboard'}
-                            className={({ isActive }) =>
-                                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${isActive
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                                }`
-                            }
-                        >
-                            <span className="text-base">{item.icon}</span>
-                            {item.label}
-                        </NavLink>
-                    ))}
+                {filteredNavItems.map((item) => (
+                    <NavLink
+                        key={item.path}
+                        to={item.path}
+                        end={item.path === '/dashboard'}
+                        className={({ isActive }) =>
+                            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${isActive
+                                ? 'bg-blue-600 text-white'
+                                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                            }`
+                        }
+                    >
+                        <span className="text-base">{item.icon}</span>
+                        {item.label}
+                    </NavLink>
+                ))}
             </nav>
 
             {/* Admin panel */}
