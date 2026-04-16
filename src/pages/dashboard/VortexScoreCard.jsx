@@ -102,7 +102,10 @@ export default function VortexScoreCard() {
     const isNegative = scoreChange < 0
 
     return (
-        <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${colors.border}`}>
+        <div
+            onClick={() => navigate('/vortex-score')}
+            className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md cursor-pointer ${colors.border}`}
+        >
             {/* Header */}
             <div className={`px-5 py-4 border-b ${colors.bg} ${colors.border}`}>
                 <div className="flex items-center justify-between">
@@ -110,12 +113,7 @@ export default function VortexScoreCard() {
                         <span className="text-xl">🏆</span>
                         <h3 className="text-sm font-semibold text-gray-900">Vortex Score</h3>
                     </div>
-                    <button
-                        onClick={() => navigate('/vortex-score')}
-                        className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
-                    >
-                        View Details →
-                    </button>
+                    <span className="text-xs text-blue-600 font-medium">Tap for details →</span>
                 </div>
             </div>
 

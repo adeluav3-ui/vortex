@@ -7,6 +7,7 @@ import HelpModal from './HelpModal'
 
 const RETAIL_NAV_ITEMS = [
     { path: '/dashboard', label: 'Dashboard', icon: '🏠', module: 'dashboard' },
+    { path: '/vortex-score', label: 'Vortex Score', icon: '🏆', module: 'vortex-score' },
     { path: '/sales', label: 'Sales / POS', icon: '🧾', module: 'sales' },
     { path: '/inventory', label: 'Inventory', icon: '📦', module: 'inventory' },
     { path: '/expenses', label: 'Expenses', icon: '💸', module: 'expenses' },
@@ -20,6 +21,7 @@ const RETAIL_NAV_ITEMS = [
 
 const VENDOR_NAV_ITEMS = [
     { path: '/dashboard', label: 'Dashboard', icon: '🏠', module: 'dashboard' },
+    { path: '/vortex-score', label: 'Vortex Score', icon: '🏆', module: 'vortex-score' },
     { path: '/orders', label: 'Orders', icon: '🛍️', module: 'orders' },
     { path: '/inventory', label: 'Products', icon: '📦', module: 'inventory' },
     { path: '/payments', label: 'Payments', icon: '💳', module: 'payments' },
