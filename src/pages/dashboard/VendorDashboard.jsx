@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import PageWrapper from '../../components/layout/PageWrapper'
-import VortexScoreCard from '../../components/dashboard/VortexScoreCard'
+import VortexScoreCard from '../../pages/dashboard/VortexScoreCard'
 
 const ORDER_STATUS_COLORS = {
     pending: 'bg-yellow-50 text-yellow-700',

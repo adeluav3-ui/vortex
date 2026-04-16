@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import PageWrapper from '../../components/layout/PageWrapper'
 import { useBranchFilter } from '../../hooks/useBranchFilter'
-import VortexScoreCard from '../../components/dashboard/VortexScoreCard'
+import VortexScoreCard from '../../pages/dashboard/VortexScoreCard'
 
 export default function RetailDashboard() {
     const { profile } = useAuth()
