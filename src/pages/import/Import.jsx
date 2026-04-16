@@ -158,6 +158,7 @@ export default function Import() {
     const fileInputRef = useRef()
 
     const isVendor = profile?.businesses?.mode === 'online_vendor'
+    const isCombo = profile?.businesses?.mode === 'combo'  // FIXED: Added this line
 
     const availableTypes = Object.entries(TEMPLATES)
         .filter(([, tmpl]) => {
@@ -452,9 +453,9 @@ export default function Import() {
                             business_id: profile.business_id,
                             branch_id: profile.branch_id,
                             expense_date: expDate,
-                            description: row.description?.trim() || row.category?.trim() || 'Imported expense',
+                            title: row.description?.trim() || row.category?.trim() || 'Imported expense',
                             amount: Number(String(row.amount).replace(/,/g, '')) || 0,
-                            payment_method: normalisePaymentMethod(row.payment_method, ['cash', 'card', 'transfer', 'other']),
+                            note: row.category?.trim() ? `Category: ${row.category}` : null,
                         })
                         imported++
                     } catch {
