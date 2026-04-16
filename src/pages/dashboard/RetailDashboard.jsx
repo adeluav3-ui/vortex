@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import PageWrapper from '../../components/layout/PageWrapper'
 import { useBranchFilter } from '../../hooks/useBranchFilter'
+import VortexScoreCard from '../../components/dashboard/VortexScoreCard'
 
 export default function RetailDashboard() {
     const { profile } = useAuth()
@@ -157,6 +158,9 @@ export default function RetailDashboard() {
 
     return (
         <PageWrapper title="Dashboard">
+            <div className="mb-6">
+                <VortexScoreCard />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {[
                     { label: "Today's Sales", value: `₦${stats.todaySales.toLocaleString()}`, icon: '🧾', color: 'text-blue-600' },

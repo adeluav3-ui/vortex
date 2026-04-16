@@ -28,6 +28,7 @@ import Import from '../pages/import/Import'
 import AuditLogs from '../pages/audit-logs/AuditLogs'
 import WaitingList from '../pages/WaitingList'
 import LandingPage from '../pages/LandingPage'
+import VortexScorePage from '../pages/vortex-score/VortexScorePage'
 
 // ── Guards ─────────────────────────────────────────────────────────────────────
 
@@ -186,6 +187,14 @@ export default function AppRoutes() {
             <Route path="/settings" element={<RoleRoute module="dashboard"><Settings /></RoleRoute>} />
             <Route path="/settings/billing" element={<RoleRoute module="dashboard"><Settings /></RoleRoute>} />
             <Route path="/audit-logs" element={<RoleRoute module="reports"><AuditLogs /></RoleRoute>} />
+
+
+            <Route path="/vortex-score" element={
+                <RoleRoute module="dashboard">
+                    <VortexScorePage />
+                </RoleRoute>
+            } />
+
 
             {/* ── Combo-aware routes (customers, payments, invoices, delivery, storefront, import) ── */}
             <Route path="/customers" element={

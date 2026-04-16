@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import PageWrapper from '../../components/layout/PageWrapper'
+import VortexScoreCard from '../../components/dashboard/VortexScoreCard'
 
 const ORDER_STATUS_COLORS = {
     pending: 'bg-yellow-50 text-yellow-700',
@@ -168,7 +169,9 @@ export default function VendorDashboard() {
 
     return (
         <PageWrapper title="Dashboard">
-
+            <div className="mb-6">
+                <VortexScoreCard />
+            </div>
             {/* ── Stat Cards ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {[
