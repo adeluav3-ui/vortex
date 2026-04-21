@@ -71,6 +71,10 @@ const RETAIL_PLANS_TRIAL = [
         features: ['Unlimited branches', 'Unlimited staff', 'Unlimited products', 'Full Reports', 'Audit logs', 'Priority support'],
         locked: [],
     },
+]
+
+// ─── Combo Plans (for trial expiry) ─────────────────────────────────────────
+const COMBO_PLANS_TRIAL = [
     {
         tier: 'combo_basic',
         name: 'Basic',
@@ -113,10 +117,25 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
     const [error, setError] = useState('')
     const [showLockWarning, setShowLockWarning] = useState(null)
 
-    const isVendor = businessMode !== 'retail'
-    const ACTIVE_PLANS = isVendor ? VENDOR_PLANS : RETAIL_PLANS_TRIAL
-    const trialDays = isVendor ? 14 : 7
-    const trialTopPlan = isVendor ? 'Scale' : 'Business'
+    // Determine which plans to show based on business mode
+    let ACTIVE_PLANS = []
+    let trialDays = 7
+    let trialTopPlan = 'Business'
+
+    if (businessMode === 'online_vendor') {
+        ACTIVE_PLANS = VENDOR_PLANS
+        trialDays = 14
+        trialTopPlan = 'Scale'
+    } else if (businessMode === 'combo') {
+        ACTIVE_PLANS = COMBO_PLANS_TRIAL
+        trialDays = 7
+        trialTopPlan = 'Premium'
+    } else {
+        // retail mode
+        ACTIVE_PLANS = RETAIL_PLANS_TRIAL
+        trialDays = 7
+        trialTopPlan = 'Business'
+    }
 
     // Load Paystack
     useEffect(() => {
@@ -128,7 +147,7 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
     }, [])
 
     function handleSelectPlan(plan) {
-        // If not Scale, show a lock warning first
+        // If not the top plan, show lock warning first
         if (plan.locked.length > 0) {
             setShowLockWarning(plan)
         } else {
@@ -173,6 +192,7 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
             },
             onClose: () => {
                 setError('Payment was cancelled. Please complete payment to continue using Vortex.')
+                setLoading(false)
             },
             callback: function () {
                 async function onSuccess() {
@@ -199,38 +219,39 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
 
     return (
         <>
-            {/* Lock warning confirmation */}
+            {/* Lock warning confirmation - Mobile optimized */}
             {showLockWarning && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 py-6">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 z-10">
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-5 space-y-4 z-10 max-h-[90vh] overflow-y-auto">
                         <div className="text-center space-y-2">
-                            <div className="text-3xl">🔒</div>
-                            <h3 className="text-base font-bold text-gray-900">Some features will be locked</h3>
+                            <div className="text-4xl">🔒</div>
+                            <h3 className="text-lg font-bold text-gray-900">Some features will be locked</h3>
                             <p className="text-sm text-gray-500">
-                                The <span className="font-semibold text-gray-700">{showLockWarning.name}</span> plan doesn't include everything you had during your trial. These features will be locked:
+                                The <span className="font-semibold text-gray-700">{showLockWarning.name}</span> plan doesn't include everything you had during your trial.
                             </p>
                         </div>
-                        <ul className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 space-y-1.5">
+                        <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 space-y-1.5">
+                            <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">Locked features:</p>
                             {showLockWarning.locked.map(f => (
                                 <li key={f} className="text-sm text-red-700 flex items-center gap-2">
                                     <span>✕</span> {f}
                                 </li>
                             ))}
-                        </ul>
+                        </div>
                         <p className="text-xs text-gray-400 text-center">
-                            Any data you entered in these features is safe — it'll be accessible again if you upgrade later.
+                            Your data is safe — it'll be accessible again if you upgrade later.
                         </p>
-                        <div className="flex gap-3">
+                        <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
                             <button
                                 onClick={() => setShowLockWarning(null)}
-                                className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2 text-sm font-medium hover:bg-gray-50 transition"
+                                className="w-full sm:flex-1 border border-gray-300 text-gray-700 rounded-xl py-3 text-sm font-medium hover:bg-gray-50 transition active:scale-[0.98]"
                             >
                                 Go back
                             </button>
                             <button
                                 onClick={confirmDowngrade}
-                                className="flex-1 bg-gray-800 text-white rounded-lg py-2 text-sm font-medium hover:bg-gray-900 transition"
+                                className="w-full sm:flex-1 bg-gray-800 text-white rounded-xl py-3 text-sm font-medium hover:bg-gray-900 transition active:scale-[0.98]"
                             >
                                 Continue with {showLockWarning.name}
                             </button>
@@ -239,37 +260,37 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
                 </div>
             )}
 
-            {/* Main modal — non-dismissable */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 overflow-y-auto">
+            {/* Main modal — Mobile optimized, non-dismissable */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-4 overflow-y-auto">
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
-                <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl z-10 overflow-hidden">
+                <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl z-10 max-h-[95vh] overflow-y-auto">
 
-                    {/* Top banner */}
-                    <div className="bg-linear-to-r from-blue-600 to-indigo-600 px-6 py-5 text-center">
-                        <p className="text-xs font-semibold text-blue-200 uppercase tracking-widest mb-1">Free Trial Ended</p>
-                        <h2 className="text-xl font-bold text-white">Your {trialDays}-day trial has expired</h2>
-                        <p className="text-sm text-blue-100 mt-1">
-                            Choose a plan to keep using Vortex. Your data is safe and waiting.
+                    {/* Top banner - Mobile friendly */}
+                    <div className="bg-linear-to-r from-blue-600 to-indigo-600 px-5 py-5 sm:px-6 sm:py-5 text-center sticky top-0">
+                        <p className="text-xs font-semibold text-blue-200 uppercase tracking-wider mb-1">Free Trial Ended</p>
+                        <h2 className="text-lg sm:text-xl font-bold text-white">Your {trialDays}-day trial has expired</h2>
+                        <p className="text-xs sm:text-sm text-blue-100 mt-1 px-2">
+                            Choose a plan to keep using Vortex. Your data is safe.
                         </p>
                     </div>
 
-                    <div className="p-6 space-y-6">
+                    <div className="p-5 sm:p-6 space-y-5">
 
-                        {/* Trial recap */}
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                            <span className="text-xl">💡</span>
-                            <p className="text-sm text-amber-800 leading-relaxed">
-                                During your trial you had access to the <span className="font-semibold">{trialTopPlan} plan</span> — the full feature set. If you loved the experience, we recommend staying on {trialTopPlan}.
+                        {/* Trial recap - Mobile optimized */}
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-3 sm:px-4 flex items-start gap-2 sm:gap-3">
+                            <span className="text-xl shrink-0">💡</span>
+                            <p className="text-xs sm:text-sm text-amber-800 leading-relaxed">
+                                During your trial you had access to the <span className="font-semibold">{trialTopPlan} plan</span> — the full feature set. We recommend staying on {trialTopPlan}.
                             </p>
                         </div>
 
-                        {/* Billing toggle */}
-                        <div className="flex items-center justify-center gap-3">
+                        {/* Billing toggle - Mobile friendly */}
+                        <div className="flex items-center justify-center gap-2 sm:gap-3">
                             <button
                                 onClick={() => setBillingInterval('monthly')}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'monthly'
-                                    ? 'bg-blue-600 text-white'
+                                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-medium transition active:scale-[0.98] ${billingInterval === 'monthly'
+                                    ? 'bg-blue-600 text-white shadow-md'
                                     : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
                                     }`}
                             >
@@ -277,83 +298,91 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
                             </button>
                             <button
                                 onClick={() => setBillingInterval('yearly')}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingInterval === 'yearly'
-                                    ? 'bg-blue-600 text-white'
+                                className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-medium transition active:scale-[0.98] ${billingInterval === 'yearly'
+                                    ? 'bg-blue-600 text-white shadow-md'
                                     : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
                                     }`}
                             >
                                 Yearly
-                                <span className="ml-2 text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full font-semibold">
+                                <span className="ml-1 sm:ml-2 text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full font-semibold">
                                     15% off
                                 </span>
                             </button>
                         </div>
 
-                        {/* Plan cards */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Plan cards - Mobile optimized (vertical scroll on mobile) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-h-[40vh] sm:max-h-none overflow-y-auto sm:overflow-visible px-0.5">
                             {ACTIVE_PLANS.map(plan => {
                                 const price = billingInterval === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice
                                 const monthlyEquiv = billingInterval === 'yearly'
                                     ? Math.round(plan.yearlyPrice / 12).toLocaleString()
                                     : null
                                 const isSelected = selectedPlan?.tier === plan.tier
-                                const isScale = plan.tier === 'scale'
+                                const isTopPlan = plan.locked.length === 0
 
                                 return (
                                     <button
                                         key={plan.tier}
                                         onClick={() => handleSelectPlan(plan)}
-                                        className={`border-2 rounded-xl p-4 text-left transition relative ${isSelected
-                                            ? 'border-blue-600 bg-blue-50'
-                                            : isScale
+                                        className={`border-2 rounded-xl p-4 text-left transition-all relative active:scale-[0.98] ${isSelected
+                                            ? 'border-blue-600 bg-blue-50 shadow-md'
+                                            : isTopPlan
                                                 ? 'border-indigo-300 bg-indigo-50/40 hover:border-blue-400'
                                                 : 'border-gray-200 hover:border-blue-300'
                                             }`}
                                     >
                                         {plan.badge && (
-                                            <span className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${isScale ? 'bg-indigo-600 text-white' : 'bg-blue-600 text-white'}`}>
+                                            <span className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${isTopPlan ? 'bg-indigo-600 text-white' : 'bg-blue-600 text-white'}`}>
                                                 {plan.badge}
                                             </span>
                                         )}
                                         <div className="flex items-center justify-between mb-2">
-                                            <h3 className="text-sm font-bold text-gray-900">{plan.name}</h3>
-                                            {isSelected && <span className="text-blue-600 text-lg">✓</span>}
+                                            <h3 className="text-base sm:text-sm font-bold text-gray-900">{plan.name}</h3>
+                                            {isSelected && <span className="text-blue-600 text-lg ml-2">✓</span>}
                                         </div>
-                                        <p className="text-xl font-bold text-gray-900">
+                                        <p className="text-lg sm:text-xl font-bold text-gray-900">
                                             ₦{price.toLocaleString()}
                                             <span className="text-xs font-normal text-gray-400">/{billingInterval === 'yearly' ? 'yr' : 'mo'}</span>
                                         </p>
                                         {monthlyEquiv && (
                                             <p className="text-xs text-green-600 mb-2">₦{monthlyEquiv}/mo</p>
                                         )}
-                                        <ul className="mt-2 space-y-1">
-                                            {plan.features.map(f => (
-                                                <li key={f} className="text-xs text-gray-500 flex items-start gap-1">
-                                                    <span className="text-green-500 shrink-0">✓</span> {f}
+                                        <div className="mt-2 space-y-1 max-h-28 overflow-y-auto">
+                                            {plan.features.slice(0, 4).map(f => (
+                                                <li key={f} className="text-xs text-gray-600 flex items-start gap-1">
+                                                    <span className="text-green-500 shrink-0">✓</span>
+                                                    <span className="break-words">{f}</span>
                                                 </li>
                                             ))}
-                                            {plan.locked.length > 0 && plan.locked.map(f => (
+                                            {plan.features.length > 4 && (
+                                                <li className="text-xs text-gray-400 pl-4">+{plan.features.length - 4} more</li>
+                                            )}
+                                            {plan.locked.length > 0 && plan.locked.slice(0, 2).map(f => (
                                                 <li key={f} className="text-xs text-gray-300 flex items-start gap-1 line-through">
-                                                    <span className="shrink-0">✕</span> {f}
+                                                    <span className="shrink-0">✕</span>
+                                                    <span className="break-words">{f}</span>
                                                 </li>
                                             ))}
-                                        </ul>
+                                            {plan.locked.length > 2 && (
+                                                <li className="text-xs text-gray-300 pl-4">+{plan.locked.length - 2} locked</li>
+                                            )}
+                                        </div>
                                     </button>
                                 )
                             })}
                         </div>
 
                         {error && (
-                            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
                                 <p className="text-sm text-red-600">{error}</p>
                             </div>
                         )}
 
-                        {/* CTA */}
+                        {/* CTA - Mobile optimized */}
                         <button
                             onClick={handlePayment}
                             disabled={loading || !selectedPlan}
-                            className="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-full bg-blue-600 text-white rounded-xl py-3.5 sm:py-3 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-40 disabled:cursor-not-allowed shadow-md active:scale-[0.98]"
                         >
                             {loading
                                 ? 'Processing...'
@@ -363,8 +392,8 @@ export default function TrialExpiredModal({ businessId, businessMode, onSubscrib
                             }
                         </button>
 
-                        <p className="text-xs text-center text-gray-400">
-                            Secure payment via Paystack · Cancel anytime · Your data is always yours
+                        <p className="text-xs text-center text-gray-400 px-2">
+                            🔒 Secure payment via Paystack · Cancel anytime · Your data is always yours
                         </p>
                     </div>
                 </div>
